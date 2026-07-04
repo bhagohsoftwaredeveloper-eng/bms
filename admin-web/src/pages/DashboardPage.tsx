@@ -8,6 +8,7 @@ import { SimpleBarChart, SimplePieChart } from '../components/SimpleChart';
 import { Calendar } from '../components/Calendar';
 import { Dialog } from '../components/Dialog';
 import { StatusBadge } from '../components/StatusBadge';
+import { Stagger, MotionItem, AnimatedNumber } from '../lib/motion';
 import type { AuthenticatedUser, Client, DesignJob, DevProject, Earning, FinancialSummary, Job, JobOrder, KpiDashboard, License, UserRole, Withdrawal } from '../lib/types';
 
 function useList<T>(key: string, url: string) {
@@ -27,7 +28,7 @@ interface SummaryCard {
 
 function CardGrid({ cards }: { cards: SummaryCard[] }) {
   return (
-    <div
+    <Stagger
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -36,18 +37,20 @@ function CardGrid({ cards }: { cards: SummaryCard[] }) {
       }}
     >
       {cards.map((card) => (
-        <div key={card.label} className="card">
+        <MotionItem key={card.label} className="card card--static">
           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>{card.label}</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: card.color }}>{card.value}</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: card.color }}>
+            {typeof card.value === 'number' ? <AnimatedNumber value={card.value} /> : card.value}
+          </div>
           {card.total !== undefined && (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>of {card.total} total</div>
           )}
           {card.subtext && (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{card.subtext}</div>
           )}
-        </div>
+        </MotionItem>
       ))}
-    </div>
+    </Stagger>
   );
 }
 

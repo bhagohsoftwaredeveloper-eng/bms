@@ -351,7 +351,7 @@ function ClientsTable({ data, onEdit, onDelete, deleteIsPending }: {
                 <th></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="stagger-rows">
               {pg.paginated.map((client) => (
                 <tr key={client.id}>
                   <td style={{ fontFamily: 'monospace' }}>{client.clientCode}</td>

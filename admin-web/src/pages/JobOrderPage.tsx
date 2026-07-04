@@ -1,5 +1,32 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import html2pdf from 'html2pdf.js';
+
+// Convert every <img> inside `root` to an embedded base64 data URL and wait for
+// it to finish loading, so html2canvas reliably captures the logo in the PDF.
+async function inlineImages(root: HTMLElement): Promise<void> {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map(async (img) => {
+      const src = img.getAttribute('src') ?? '';
+      if (!src || src.startsWith('data:')) return;
+      try {
+        const path = src.replace(/^https?:\/\/[^/]+/, '').replace(/^\/api/, '');
+        const res = await api.get(path, { responseType: 'blob' });
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('read failed'));
+          reader.readAsDataURL(res.data as Blob);
+        });
+        img.setAttribute('src', dataUrl);
+        await img.decode().catch(() => undefined);
+      } catch {
+        /* leave original src if conversion fails */
+      }
+    }),
+  );
+}
+
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
@@ -292,6 +319,25 @@ export function JobOrderPage() {
     queryFn: async () => (await api.get<CompanyProfile>('/company-profile')).data,
   });
 
+  // Preload the company logo as a base64 data URL so it embeds reliably in the
+  // downloaded PDF (html2canvas cannot capture not-yet-loaded / tainted images).
+  const logoUrl = companyProfileQuery.data?.logoUrl ?? undefined;
+  const logoDataQuery = useQuery({
+    queryKey: ['company-logo-data', logoUrl],
+    enabled: !!logoUrl,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const path = logoUrl!.replace(/^\/api/, '');
+      const res = await api.get(path, { responseType: 'blob' });
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('logo read failed'));
+        reader.readAsDataURL(res.data as Blob);
+      });
+    },
+  });
+
   // ── Form state ──
   const [clientId, setClientId] = useState('');
   const [productId, setProductId] = useState('');
@@ -479,6 +525,7 @@ export function JobOrderPage() {
     const filename = `${DOC_META[docType].filePrefix}-${jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}.pdf`;
     element.style.display = 'block';
     try {
+      await inlineImages(element);
       await html2pdf().set({
         margin: [10, 10],
         filename,
@@ -563,7 +610,12 @@ export function JobOrderPage() {
           status={jo?.status ?? 'DRAFT'}
           createdAt={jo?.createdAt}
           companyName={companyProfileQuery.data?.businessName}
-          companyLogoUrl={companyProfileQuery.data?.logoUrl ?? undefined}
+          companyLogoUrl={logoDataQuery.data ?? companyProfileQuery.data?.logoUrl ?? undefined}
+          companyAddress={companyProfileQuery.data?.address ?? undefined}
+          companyPhone={companyProfileQuery.data?.phone ?? undefined}
+          companyEmail={companyProfileQuery.data?.email ?? undefined}
+          companyWebsite={companyProfileQuery.data?.website ?? undefined}
+          companyTin={companyProfileQuery.data?.tin ?? undefined}
         />
       </div>
 
@@ -1118,47 +1170,57 @@ interface PrintTemplateProps {
   createdAt?: string;
   companyName?: string;
   companyLogoUrl?: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyEmail?: string;
+  companyWebsite?: string;
+  companyTin?: string;
 }
 
 function PrintTemplate({
   type, docType, jobId, joNumber, client, product, parentTitle,
   salePrice, discountAmt, softwareTotal, materialsTotal, grandTotal,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
+  companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
 }: PrintTemplateProps & { type: string, parentTitle?: string }) {
   const p = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const isSoftware = type === 'SOFTWARE';
   const meta = DOC_META[docType];
   const isReceipt = docType === 'RECEIPT';
-  const docNoLabel = `${meta.label} No.`;
   const totalLabel = isReceipt ? 'AMOUNT PAID' : 'GRAND TOTAL';
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '12pt', lineHeight: 1.5 }}>
-      {/* Letterhead */}
-      <div style={{ textAlign: 'center', marginBottom: '24pt', borderBottom: '2px solid #000', paddingBottom: '12pt' }}>
-        {companyLogoUrl && (
-          <img
-            src={companyLogoUrl}
-            alt="Company logo"
-            style={{ maxHeight: '64pt', maxWidth: '200pt', objectFit: 'contain', marginBottom: '8pt' }}
-          />
-        )}
-        <div style={{ fontSize: '18pt', fontWeight: 'bold' }}>
-          {companyName ?? (isSoftware ? 'SOFTWARE DEPLOYMENT & LICENSE MANAGEMENT' : 'DESIGN & ADVERTISING SERVICES')}
+      {/* Header — logo + company (left), document meta (right) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16pt', borderBottom: '2px solid #000', paddingBottom: '10pt', marginBottom: '14pt' }}>
+        <div style={{ display: 'flex', gap: '12pt', alignItems: 'center' }}>
+          {companyLogoUrl && (
+            <img
+              src={companyLogoUrl}
+              alt="Company logo"
+              style={{ height: '58pt', width: '58pt', objectFit: 'contain', flexShrink: 0 }}
+            />
+          )}
+          <div style={{ lineHeight: 1.35 }}>
+            <div style={{ fontSize: '15pt', fontWeight: 'bold' }}>
+              {companyName ?? (isSoftware ? 'SOFTWARE DEPLOYMENT & LICENSE MANAGEMENT' : 'DESIGN & ADVERTISING SERVICES')}
+            </div>
+            {companyAddress && <div style={{ fontSize: '8.5pt', color: '#333' }}>{companyAddress}</div>}
+            {(companyPhone || companyEmail) && (
+              <div style={{ fontSize: '8.5pt', color: '#333' }}>
+                {[companyPhone && `Tel: ${companyPhone}`, companyEmail].filter(Boolean).join('  •  ')}
+              </div>
+            )}
+            {companyWebsite && <div style={{ fontSize: '8.5pt', color: '#333' }}>{companyWebsite}</div>}
+            {companyTin && <div style={{ fontSize: '8.5pt', color: '#333' }}>TIN: {companyTin}</div>}
+          </div>
         </div>
-        <div style={{ fontSize: '10pt', color: '#555', marginTop: '4pt' }}>{meta.subtitle}</div>
-      </div>
-
-      {/* Doc meta */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8pt', lineHeight: 1.25, fontSize: '10pt' }}>
-        <div>
-          <div><strong>{docNoLabel}:</strong> {meta.filePrefix}-{joNumber}</div>
-          <div><strong>{isSoftware ? 'Job ID:' : 'Design ID:'}</strong> {jobId.slice(0, 8).toUpperCase()}</div>
-          <div><strong>Status:</strong> {status}</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div><strong>Date:</strong> {createdAt ? new Date(createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</div>
-          <div><strong>Printed:</strong> {new Date().toLocaleString()}</div>
+        <div style={{ textAlign: 'right', minWidth: '150pt', flexShrink: 0 }}>
+          <div style={{ fontSize: '13pt', fontWeight: 'bold' }}>{meta.label} — {meta.filePrefix}-{joNumber}</div>
+          <div style={{ fontSize: '8.5pt', color: '#555', marginTop: '4pt' }}>{isSoftware ? 'Job ID' : 'Design ID'}: {jobId.slice(0, 8).toUpperCase()}</div>
+          <div style={{ fontSize: '8.5pt', color: '#555' }}>Status: {status}</div>
+          <div style={{ fontSize: '8.5pt', color: '#555' }}>Date: {createdAt ? new Date(createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</div>
+          <div style={{ fontSize: '8.5pt', color: '#555' }}>Printed: {new Date().toLocaleString()}</div>
         </div>
       </div>
 

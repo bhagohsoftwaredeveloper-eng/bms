@@ -24,6 +24,15 @@ export function NotificationBell() {
   const [hovered, setHovered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   const { data: notifications = [] } = useNotifications();
   const { data: unreadCount = 0 } = useUnreadCount();
@@ -109,14 +118,13 @@ export function NotificationBell() {
       {open && (
         <div
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: 320,
+            ...(isMobile
+              ? { position: 'fixed', top: 60, right: 8, left: 'auto', width: 'min(340px, calc(100vw - 16px))' }
+              : { position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 320 }),
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 12,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.28)',
             zIndex: 1000,
             overflow: 'hidden',
           }}

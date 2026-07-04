@@ -232,7 +232,7 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onAssign
                 {!isReadOnly && <th></th>}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="stagger-rows">
               {pg.paginated.map((job) => (
                 <tr key={job.id}>
                   <td style={{ fontWeight: 500 }}>{job.client?.businessName ?? '—'}</td>
@@ -511,7 +511,7 @@ function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenPr
                 <th></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="stagger-rows">
               {pg.paginated.map((job) => (
                 <tr key={job.id}>
                   <td style={{ fontWeight: 500 }}>{job.client?.businessName ?? '—'}</td>

@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from 'framer-motion';
 interface ChartDataPoint {
   label: string;
   value: number;
@@ -21,6 +22,7 @@ const CHART_COLORS = [
 ];
 
 export function SimpleBarChart({ data, height = 300 }: SimpleBarChartProps) {
+  const reduce = useReducedMotion();
   if (data.length === 0)
     return (
       <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem', fontSize: '0.9rem' }}>
@@ -97,14 +99,15 @@ export function SimpleBarChart({ data, height = 300 }: SimpleBarChartProps) {
 
         return (
           <g key={i}>
-            <rect
+            <motion.rect
               x={x}
-              y={y}
               width={barWidth}
-              height={barH}
               fill={`url(#${gradientId(i)})`}
               rx={5}
               ry={5}
+              initial={reduce ? false : { y: paddingTop + chartH, height: 0 }}
+              animate={{ y, height: barH }}
+              transition={{ duration: 0.6, delay: i * 0.06, ease: [0.22, 0.61, 0.36, 1] }}
             />
             {/* value label above bar */}
             {d.value > 0 && (
@@ -145,6 +148,7 @@ interface SimplePieChartProps {
 }
 
 export function SimplePieChart({ data, size = 220 }: SimplePieChartProps) {
+  const reduce = useReducedMotion();
   if (data.length === 0)
     return (
       <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem', fontSize: '0.9rem' }}>
@@ -210,13 +214,15 @@ export function SimplePieChart({ data, size = 220 }: SimplePieChartProps) {
         </defs>
 
         {slices.map((s, i) => (
-          <path
+          <motion.path
             key={i}
             d={s.path}
             fill={s.color}
-            opacity={0.9}
             stroke="var(--surface)"
             strokeWidth={2}
+            initial={reduce ? false : { opacity: 0 }}
+            animate={{ opacity: 0.9 }}
+            transition={{ duration: 0.4, delay: 0.1 + i * 0.09, ease: 'easeOut' }}
           />
         ))}
 

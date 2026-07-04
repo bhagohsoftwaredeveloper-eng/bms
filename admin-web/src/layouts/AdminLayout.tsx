@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { PageTransition } from '../lib/motion';
 import { useAuthStore } from '../lib/auth-store';
 import { logout as apiLogout } from '../lib/api';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -26,6 +28,10 @@ import {
   UserCog,
   LogOut,
   Zap,
+  Menu,
+  X,
+  ChevronsLeft,
+  ChevronsRight,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -203,7 +209,7 @@ function getInitials(name: string | undefined): string {
 }
 
 /* ── Sidebar nav link with hover state and update badge ── */
-function SidebarLink({ item, hasUpdate }: { item: NavLinkItem; hasUpdate: boolean }) {
+function SidebarLink({ item, hasUpdate, collapsed }: { item: NavLinkItem; hasUpdate: boolean; collapsed: boolean }) {
   const [hovered, setHovered] = useState(false);
   const Icon = NAV_ICONS[item.to];
   const markRouteRead = useNotificationStore((s) => s.markRouteRead);
@@ -223,12 +229,15 @@ function SidebarLink({ item, hasUpdate }: { item: NavLinkItem; hasUpdate: boolea
       end={item.end}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      title={collapsed ? item.label : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',
+        justifyContent: collapsed ? 'center' : undefined,
+        position: 'relative',
         gap: '0.6rem',
         padding: '0.55rem 0.75rem',
-        paddingLeft: item.indent ? '1rem' : '0.75rem',
+        paddingLeft: collapsed ? '0.75rem' : item.indent ? '1rem' : '0.75rem',
         borderRadius: 9,
         textDecoration: 'none',
         fontSize: '0.875rem',
@@ -251,7 +260,7 @@ function SidebarLink({ item, hasUpdate }: { item: NavLinkItem; hasUpdate: boolea
           strokeWidth={2}
         />
       )}
-      <span style={{ flex: 1 }}>{item.label}</span>
+      {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
       {hasUpdate && !isActive && (
         <span
           style={{
@@ -261,6 +270,7 @@ function SidebarLink({ item, hasUpdate }: { item: NavLinkItem; hasUpdate: boolea
             background: '#ef4444',
             flexShrink: 0,
             boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.3)',
+            ...(collapsed ? { position: 'absolute' as const, top: 7, right: 7 } : {}),
           }}
         />
       )}
@@ -272,6 +282,7 @@ export function AdminLayout() {
   const user = useAuthStore((s) => s.user);
   const clear = useAuthStore((s) => s.clear);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const allRoles = user?.roles ?? (user?.role ? [user.role] : []);
   const navItems: NavItem[] = user ? buildMergedNav(user.role, allRoles) : [];
   const unreadRoutes = useNotificationStore((s) => s.unreadRoutes);
@@ -290,14 +301,61 @@ export function AdminLayout() {
     navigate('/login', { replace: true });
   };
 
-  const SIDEBAR_WIDTH = 256;
+  const EXPANDED_WIDTH = 256;
+  const COLLAPSED_WIDTH = 74;
+
+  // Responsive: auto-collapse the sidebar into an off-canvas drawer on mobile.
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches,
+  );
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 900px)');
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Close the drawer whenever the route changes (mobile navigation).
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Desktop: collapse the sidebar to an icon-only rail (persisted).
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('sdlmp-sidebar-collapsed') === '1',
+  );
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem('sdlmp-sidebar-collapsed', next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const railCollapsed = collapsed && !isMobile;
+  const sidebarWidth = railCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
 
   return (
     <div style={{ display: 'flex' }}>
+      {/* Mobile drawer backdrop */}
+      <AnimatePresence>
+        {isMobile && mobileOpen && (
+          <motion.div
+            onClick={() => setMobileOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 150 }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── Sidebar ── */}
       <aside
         style={{
-          width: SIDEBAR_WIDTH,
+          width: sidebarWidth,
           background: '#060c18',
           borderRight: '1px solid rgba(255,255,255,0.06)',
           display: 'flex',
@@ -306,7 +364,10 @@ export function AdminLayout() {
           height: '100vh',
           overflow: 'hidden',
           overflowY: 'auto',
-          zIndex: 100,
+          zIndex: 200,
+          transform: isMobile && !mobileOpen ? 'translateX(-100%)' : 'translateX(0)',
+          transition: 'transform 0.28s cubic-bezier(0.22,0.61,0.36,1), width 0.24s ease',
+          boxShadow: isMobile && mobileOpen ? '0 0 40px rgba(0,0,0,0.55)' : 'none',
         }}
       >
         {/* Brand */}
@@ -316,6 +377,7 @@ export function AdminLayout() {
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: railCollapsed ? 'center' : 'flex-start',
             gap: '0.75rem',
           }}
         >
@@ -334,30 +396,32 @@ export function AdminLayout() {
           >
             <Zap size={17} color="#fff" strokeWidth={2.5} />
           </div>
-          <div>
-            <div
-              style={{
-                fontWeight: 700,
-                fontSize: '0.9rem',
-                color: '#f0f4ff',
-                letterSpacing: '-0.01em',
-                lineHeight: 1.2,
-              }}
-            >
-              {user ? PORTAL_LABEL[user.role] : 'SDLMP'}
+          {!railCollapsed && (
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  color: '#f0f4ff',
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1.2,
+                }}
+              >
+                {user ? PORTAL_LABEL[user.role] : 'SDLMP'}
+              </div>
+              <div
+                style={{
+                  fontSize: '0.65rem',
+                  color: '#4a6080',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  marginTop: 2,
+                }}
+              >
+                Admin Portal
+              </div>
             </div>
-            <div
-              style={{
-                fontSize: '0.65rem',
-                color: '#4a6080',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                marginTop: 2,
-              }}
-            >
-              Admin Portal
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -383,18 +447,20 @@ export function AdminLayout() {
                     marginTop: i === 0 ? 0 : '0.3rem',
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: '0.63rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      color: '#3a5070',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {item.label}
-                  </span>
+                  {!railCollapsed && (
+                    <span
+                      style={{
+                        fontSize: '0.63rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        color: '#3a5070',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.label}
+                    </span>
+                  )}
                   <div
                     style={{
                       flex: 1,
@@ -410,6 +476,7 @@ export function AdminLayout() {
                   key={item.to}
                   item={item}
                   hasUpdate={unreadRoutes.includes(item.to)}
+                  collapsed={railCollapsed}
                 />
               );
           })}
@@ -427,6 +494,7 @@ export function AdminLayout() {
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: railCollapsed ? 'center' : undefined,
               gap: '0.625rem',
               marginBottom: '0.625rem',
               padding: '0 0.25rem',
@@ -451,38 +519,42 @@ export function AdminLayout() {
             >
               {getInitials(user?.fullName)}
             </div>
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  color: '#dce8f8',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  lineHeight: 1.3,
-                }}
-              >
-                {user?.fullName}
+            {!railCollapsed && (
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    color: '#dce8f8',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {user?.fullName}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.69rem',
+                    color: '#3a5070',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {user?.role.replace(/_/g, ' ')}
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: '0.69rem',
-                  color: '#3a5070',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {user?.role.replace(/_/g, ' ')}
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Profile link */}
           <NavLink
             to="/profile"
+            title={railCollapsed ? 'Profile Settings' : undefined}
             style={({ isActive }) => ({
               display: 'flex',
               alignItems: 'center',
+              justifyContent: railCollapsed ? 'center' : undefined,
               gap: '0.5rem',
               padding: '0.48rem 0.75rem',
               borderRadius: 8,
@@ -499,7 +571,7 @@ export function AdminLayout() {
             })}
           >
             <UserCog size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
-            <span>Profile Settings</span>
+            {!railCollapsed && <span>Profile Settings</span>}
           </NavLink>
 
           {/* Logout */}
@@ -508,6 +580,7 @@ export function AdminLayout() {
             onClick={handleLogout}
             onMouseEnter={() => setLogoutHovered(true)}
             onMouseLeave={() => setLogoutHovered(false)}
+            title={railCollapsed ? 'Log out' : undefined}
             style={{
               width: '100%',
               display: 'flex',
@@ -527,7 +600,7 @@ export function AdminLayout() {
             }}
           >
             <LogOut size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
-            <span>Log out</span>
+            {!railCollapsed && <span>Log out</span>}
           </button>
         </div>
       </aside>
@@ -535,19 +608,20 @@ export function AdminLayout() {
       {/* ── Content ── */}
       <div
         style={{
-          marginLeft: SIDEBAR_WIDTH,
+          marginLeft: isMobile ? 0 : sidebarWidth,
           display: 'flex',
           flexDirection: 'column',
-          width: `calc(100% - ${SIDEBAR_WIDTH}px)`,
+          width: isMobile ? '100%' : `calc(100% - ${sidebarWidth}px)`,
           minHeight: '100vh',
+          transition: 'margin-left 0.28s ease, width 0.28s ease',
         }}
       >
         <header
           style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '0.875rem 2.25rem',
+            padding: isMobile ? '0.7rem 1rem' : '0.875rem 2.25rem',
             borderBottom: '1px solid var(--border)',
             background: 'var(--surface)',
             gap: '1rem',
@@ -558,19 +632,67 @@ export function AdminLayout() {
             boxShadow: '0 1px 0 var(--border)',
           }}
         >
-          <NotificationBell />
-          <ThemeToggle />
+          {isMobile ? (
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--surface-secondary)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+              }}
+            >
+              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
+              title={collapsed ? 'Expand menu' : 'Collapse menu'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--surface-secondary)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+              }}
+            >
+              {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            </button>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <NotificationBell />
+            <ThemeToggle />
+          </div>
         </header>
 
         <main
           style={{
             flex: 1,
-            padding: '2rem 2.5rem',
+            padding: isMobile ? '1.25rem 1rem' : '2rem 2.5rem',
             width: '100%',
             overflow: 'auto',
           }}
         >
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <PageTransition key={pathname}>
+              <Outlet />
+            </PageTransition>
+          </AnimatePresence>
         </main>
       </div>
     </div>

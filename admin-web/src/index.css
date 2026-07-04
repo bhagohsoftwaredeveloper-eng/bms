@@ -551,18 +551,446 @@ input[type="text"] {
   }
 }
 
-@media (max-width: 768px) {
-  aside {
-    position: relative !important;
-    width: 100% !important;
-    height: auto !important;
-    min-height: auto !important;
-    padding: 1rem !important;
-  }
+/* Mobile layout is handled by the JS off-canvas drawer in AdminLayout.
+   (Legacy static-collapse rules removed — they fought the fixed drawer.) */
 
-  main {
-    margin-left: 0 !important;
-    width: 100% !important;
-    padding: 1.25rem !important;
-  }
+/* ============================================================
+   Aurora-glass login page
+   ============================================================ */
+.lg-root {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* --- animated aurora background --- */
+.lg-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.lg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.lg-orb-1 {
+  width: 42vw; height: 42vw; min-width: 340px; min-height: 340px;
+  top: -8%; left: -6%;
+  background: radial-gradient(circle at 30% 30%, var(--accent), transparent 70%);
+}
+.lg-orb-2 {
+  width: 38vw; height: 38vw; min-width: 300px; min-height: 300px;
+  bottom: -12%; right: -8%;
+  background: radial-gradient(circle at 50% 50%, #7c3aed, transparent 70%);
+}
+.lg-orb-3 {
+  width: 30vw; height: 30vw; min-width: 260px; min-height: 260px;
+  top: 30%; right: 22%;
+  background: radial-gradient(circle at 50% 50%, var(--info), transparent 70%);
+  opacity: 0.4;
+}
+:root.dark-mode .lg-orb { opacity: 0.5; }
+:root.dark-mode .lg-orb-3 { opacity: 0.35; }
+
+/* subtle grid overlay */
+.lg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 46px 46px;
+  opacity: 0.15;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 75%);
+}
+
+/* --- glass card --- */
+.lg-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+  padding: 2.4rem 2.1rem 2rem;
+  border-radius: 22px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+:root.dark-mode .lg-card {
+  background: rgba(13, 20, 36, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* sheen sweep across the card */
+.lg-sheen {
+  position: absolute;
+  top: 0; left: -60%;
+  width: 55%; height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-18deg);
+  animation: lg-sheen 6.5s ease-in-out 1.2s infinite;
+  pointer-events: none;
+}
+:root.dark-mode .lg-sheen {
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+@keyframes lg-sheen {
+  0% { left: -60%; }
+  35%, 100% { left: 130%; }
+}
+
+/* brand */
+.lg-brand { text-align: center; margin-bottom: 1.6rem; }
+.lg-logo {
+  width: 56px; height: 56px;
+  margin: 0 auto 0.9rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+.lg-logo::after {
+  content: '';
+  position: absolute;
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  box-shadow: 0 0 0 0 var(--accent-glow);
+  animation: lg-pulse 2.8s ease-out infinite;
+}
+@keyframes lg-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  70%, 100% { box-shadow: 0 0 0 18px transparent; }
+}
+.lg-title {
+  font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em;
+  margin: 0 0 0.35rem;
+  background: linear-gradient(135deg, var(--text), var(--accent));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.lg-sub { color: var(--text-muted); font-size: 0.86rem; margin: 0; line-height: 1.5; }
+
+/* fields */
+.lg-field { margin-bottom: 1.05rem; }
+.lg-field label {
+  display: block;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.lg-input-wrap { position: relative; display: flex; align-items: center; }
+.lg-ico {
+  position: absolute; left: 0.85rem;
+  display: flex; color: var(--text-muted);
+  transition: color 0.2s ease;
+  pointer-events: none;
+}
+.lg-input {
+  width: 100%;
+  padding: 0.72rem 0.9rem 0.72rem 2.6rem;
+  font-size: 0.9rem; font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+:root.dark-mode .lg-input { background: rgba(255,255,255,0.03); }
+.lg-input::placeholder { color: var(--text-muted); opacity: 0.6; }
+.lg-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-light), 0 4px 14px var(--accent-glow);
+}
+.lg-input-wrap:focus-within .lg-ico { color: var(--accent); }
+.lg-toggle {
+  position: absolute; right: 0.6rem;
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--text-muted); border-radius: 8px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.lg-toggle:hover { color: var(--accent); background: var(--accent-light); }
+
+/* error */
+.lg-error {
+  overflow: hidden;
+  margin: 0 0 0.9rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.82rem; font-weight: 500;
+  color: var(--danger);
+  background: var(--danger-light);
+  border: 1px solid var(--danger-glow);
+  border-radius: 10px;
+}
+
+/* submit button */
+.lg-btn {
+  position: relative;
+  width: 100%;
+  margin-top: 0.4rem;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.8rem 1.25rem;
+  font-size: 0.92rem; font-weight: 600; font-family: inherit;
+  color: #fff; cursor: pointer;
+  border: none; border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  box-shadow: 0 8px 22px var(--accent-glow);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+}
+.lg-btn:hover:not(:disabled) { box-shadow: 0 12px 30px var(--accent-glow); filter: brightness(1.06); }
+.lg-btn:disabled { cursor: not-allowed; opacity: 0.85; }
+.lg-btn-glow {
+  position: absolute; top: 0; left: -80%;
+  width: 60%; height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255,255,255,0.45), transparent);
+  transform: skewX(-20deg);
+}
+.lg-btn:hover:not(:disabled) .lg-btn-glow { animation: lg-btn-sweep 0.9s ease; }
+@keyframes lg-btn-sweep { to { left: 130%; } }
+
+.lg-spin { animation: lg-spin 0.7s linear infinite; }
+@keyframes lg-spin { to { transform: rotate(360deg); } }
+
+.lg-footer {
+  margin: 1.4rem 0 0;
+  text-align: center;
+  font-size: 0.72rem; letter-spacing: 0.04em;
+  color: var(--text-muted); opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-sheen, .lg-logo::after, .lg-btn-glow { animation: none; }
+}
+
+/* ============================================================
+   System-wide motion layer (applies app-wide via shared classes)
+   ============================================================ */
+
+/* Card entrance + hover (every .card unless opted out) */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card {
+  animation: cardIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--accent);
+}
+/* opt-out marker for cards controlled by framer-motion */
+.card--static { animation: none; }
+.card--static:hover { transform: none; }
+
+/* Buttons: press + focus feedback */
+.btn { transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease; }
+.btn:active { transform: scale(0.97); }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-light); }
+
+/* Table rows: hover highlight + smooth */
+tbody tr { transition: background 0.15s ease; }
+tbody tr:hover { background: var(--surface-hover); }
+
+/* Nav links: smooth state changes */
+a, .nav-link { transition: color 0.18s ease, background 0.18s ease; }
+
+/* Inputs: focus glow consistent with login */
+input, select, textarea { transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; }
+
+/* Generic entrance utilities (opt-in) */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-up { animation: fadeUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.animate-fade-in { animation: fadeIn 0.5s ease both; }
+
+/* Skeleton shimmer for loading states (opt-in via .skeleton) */
+@keyframes shimmer { 100% { background-position: -200% 0; } }
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-secondary) 25%, var(--surface-hover) 37%, var(--surface-secondary) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .card, .animate-fade-up, .animate-fade-in, .skeleton { animation: none !important; }
+  .card { opacity: 1; transform: none; }
+  .btn:active { transform: none; }
+}
+
+/* Table row stagger (opt-in via .stagger-rows on <tbody>) */
+@keyframes rowIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+.stagger-rows > tr { animation: rowIn 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.stagger-rows > tr:nth-child(1) { animation-delay: 0.02s; }
+.stagger-rows > tr:nth-child(2) { animation-delay: 0.06s; }
+.stagger-rows > tr:nth-child(3) { animation-delay: 0.10s; }
+.stagger-rows > tr:nth-child(4) { animation-delay: 0.14s; }
+.stagger-rows > tr:nth-child(5) { animation-delay: 0.18s; }
+.stagger-rows > tr:nth-child(6) { animation-delay: 0.22s; }
+.stagger-rows > tr:nth-child(7) { animation-delay: 0.26s; }
+.stagger-rows > tr:nth-child(8) { animation-delay: 0.30s; }
+.stagger-rows > tr:nth-child(9) { animation-delay: 0.34s; }
+.stagger-rows > tr:nth-child(10) { animation-delay: 0.38s; }
+.stagger-rows > tr:nth-child(11) { animation-delay: 0.42s; }
+.stagger-rows > tr:nth-child(12) { animation-delay: 0.46s; }
+.stagger-rows > tr:nth-child(n+13) { animation-delay: 0.50s; }
+@media (prefers-reduced-motion: reduce) {
+  .stagger-rows > tr { animation: none !important; opacity: 1; transform: none; }
+}
+
+/* ============================================================
+   Glassmorphism cards + ambient backdrop
+   ============================================================ */
+:root, .light-mode {
+  --glass-bg: rgba(255, 255, 255, 0.60);
+  --glass-brd: rgba(255, 255, 255, 0.85);
+  --glass-hl: rgba(255, 255, 255, 0.70);
+  --amb-1: rgba(79, 70, 229, 0.07);
+  --amb-2: rgba(14, 165, 233, 0.06);
+}
+.dark-mode {
+  --glass-bg: rgba(26, 32, 44, 0.55);
+  --glass-brd: rgba(255, 255, 255, 0.09);
+  --glass-hl: rgba(255, 255, 255, 0.06);
+  --amb-1: rgba(99, 102, 241, 0.13);
+  --amb-2: rgba(6, 182, 212, 0.10);
+}
+
+/* ambient glow behind content so glass reads */
+body { position: relative; }
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42rem 42rem at 10% 4%, var(--amb-1), transparent 60%),
+    radial-gradient(40rem 40rem at 92% 96%, var(--amb-2), transparent 62%);
+}
+#root { position: relative; z-index: 1; }
+
+/* frosted glass on every card */
+.card {
+  background: var(--glass-bg);
+  border-color: var(--glass-brd);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  box-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-hl);
+}
+.card:hover {
+  box-shadow: var(--shadow-lg), inset 0 1px 0 var(--glass-hl);
+}
+
+/* ============================================================
+   Icon segmented theme switcher
+   ============================================================ */
+.theme-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+}
+.theme-seg-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.18s ease;
+}
+.theme-seg-btn:hover { color: var(--text); }
+.theme-seg-btn.active { color: var(--accent); }
+.theme-seg-btn > svg { position: relative; z-index: 1; }
+.theme-seg-ind {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: var(--accent-light);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+  z-index: 0;
+}
+
+/* ============================================================
+   Modern select dropdowns (app-wide) — replace native chrome
+   ============================================================ */
+select,
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font-family: inherit;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa4b2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 16px;
+  padding-right: 2.1rem !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+select:hover,
+.field select:hover { border-color: var(--accent); }
+select:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* option list — themed where the browser allows it */
+select option,
+select optgroup {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* prevent page-level horizontal overflow */
+html, body { max-width: 100%; overflow-x: hidden; }
+
+/* ============================================================
+   Mobile tables: scroll horizontally instead of squishing/overlapping
+   ============================================================ */
+@media (max-width: 768px) {
+  /* any card containing a wide table scrolls sideways within itself */
+  .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* keep columns readable — the card scrolls instead of columns colliding */
+  table { min-width: 620px; }
+  th, td { padding: 0.7rem 0.85rem; white-space: nowrap; }
+  /* disable sticky header on mobile (avoids overlap while scrolling) */
+  thead, th { position: static; }
 }

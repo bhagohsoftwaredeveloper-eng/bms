@@ -88,6 +88,7 @@ function incentivePct(totalScore: number): number {
   if (totalScore >= 90) return 0.75;
   if (totalScore >= 85) return 0.5;
   if (totalScore >= 80) return 0.25;
+  if (totalScore >= 75) return 0.1;
   return 0;
 }
 

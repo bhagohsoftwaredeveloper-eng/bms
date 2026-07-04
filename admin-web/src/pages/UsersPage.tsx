@@ -75,110 +75,6 @@ function RoleChip({ role, onRemove }: { role: UserRole; onRemove?: () => void })
   );
 }
 
-// ── Role manager for a user row ───────────────────────────────────────────────
-
-function RoleManager({ user }: { user: TeamMember }) {
-  const qc = useQueryClient();
-  const [addingRole, setAddingRole] = useState<UserRole | ''>('');
-
-  const allCurrentRoles: UserRole[] = [user.role, ...(user.additionalRoles ?? []).map((r) => r.role)];
-
-  const addRole = useMutation({
-    mutationFn: (role: UserRole) => api.post(`/users/${user.id}/roles`, { role }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users', 'team'] }); setAddingRole(''); },
-  });
-
-  const removeRole = useMutation({
-    mutationFn: (role: UserRole) => api.delete(`/users/${user.id}/roles/${role}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'team'] }),
-  });
-
-  const changePrimary = useMutation({
-    mutationFn: (role: UserRole) => api.patch(`/users/${user.id}/primary-role`, { role }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'team'] }),
-  });
-
-  const available = ALL_ROLES.filter((r) => !allCurrentRoles.includes(r));
-
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', alignItems: 'center' }}>
-      {/* Primary role — star icon to indicate it's primary */}
-      <RoleChip
-        key={user.role}
-        role={user.role}
-      />
-      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginRight: '0.15rem' }}>★</span>
-
-      {/* Additional roles */}
-      {(user.additionalRoles ?? []).map((ra) => (
-        <RoleChip
-          key={ra.role}
-          role={ra.role}
-          onRemove={() => removeRole.mutate(ra.role)}
-        />
-      ))}
-
-      {/* Add role */}
-      {available.length > 0 && (
-        addingRole ? (
-          <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
-            <select
-              className="input"
-              style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', height: 'auto', width: 'auto' }}
-              value={addingRole}
-              onChange={(e) => setAddingRole(e.target.value as UserRole)}
-            >
-              {available.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-            </select>
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem' }}
-              disabled={!addingRole || addRole.isPending}
-              onClick={() => addingRole && addRole.mutate(addingRole as UserRole)}
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem' }}
-              onClick={() => setAddingRole('')}
-            >
-              ✕
-            </button>
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAddingRole(available[0])}
-            style={{ background: 'none', border: '1px dashed var(--border)', borderRadius: 999, padding: '0.15rem 0.5rem', fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer' }}
-            title="Add another role"
-          >
-            + role
-          </button>
-        )
-      )}
-
-      {/* Change primary role */}
-      {(user.additionalRoles ?? []).length > 0 && (
-        <select
-          className="input"
-          style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', height: 'auto', width: 'auto', marginLeft: '0.25rem', color: 'var(--text-muted)' }}
-          value=""
-          onChange={(e) => e.target.value && changePrimary.mutate(e.target.value as UserRole)}
-          title="Set as primary role"
-        >
-          <option value="">★ set primary</option>
-          {allCurrentRoles.filter((r) => r !== user.role).map((r) => (
-            <option key={r} value={r}>Make {ROLE_LABEL[r]} primary</option>
-          ))}
-        </select>
-      )}
-    </div>
-  );
-}
-
 // ── Edit Dialog Component ─────────────────────────────────────────────────────
 
 function EditUserDialog({ user, onClose }: { user: TeamMember | null; onClose: () => void }) {
@@ -341,7 +237,7 @@ export function UsersPage() {
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>Team</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-            Manage team member accounts. A member can hold multiple roles — the <strong>★ primary role</strong> determines their dashboard and portal.
+            Manage team member accounts. Each member has one <strong>primary role</strong> (their dashboard &amp; portal) plus any <strong>extra access</strong> you grant. Set both from <strong>Edit</strong>.
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
@@ -469,7 +365,14 @@ function UsersTable({ data, isLoading, isError, onEdit, onToggleActive, toggleIs
                   <tr key={u.id}>
                     <td style={{ fontWeight: 600 }}>{u.fullName}</td>
                     <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{u.email}</td>
-                    <td><RoleManager user={u} /></td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', alignItems: 'center' }}>
+                        <RoleChip role={u.role} />
+                        {(u.additionalRoles ?? []).map((ra) => (
+                          <RoleChip key={ra.role} role={ra.role} />
+                        ))}
+                      </div>
+                    </td>
                     <td>{u.phone ?? '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtPeso(u.baseBonus)}</td>
                     <td><StatusBadge status={u.isActive ? 'active' : 'suspended'} /></td>

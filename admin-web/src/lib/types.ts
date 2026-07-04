@@ -387,3 +387,10 @@ export interface DevProject {
   sessions?: DevProjectSession[];
   reports?: DevProjectReport[];
 }
+
+export interface ResetModuleInfo {
+  id: string;
+  label: string;
+  description: string;
+  count: number;
+}

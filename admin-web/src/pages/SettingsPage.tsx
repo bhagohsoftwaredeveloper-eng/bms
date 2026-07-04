@@ -1,20 +1,21 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { BackupFile, CompanyProfile } from '../lib/types';
+import type { BackupFile, CompanyProfile, ResetModuleInfo } from '../lib/types';
+import { Dialog } from '../components/Dialog';
 import { AuditLogsPage } from './AuditLogsPage';
 import { KpiSettingsPage } from './KpiSettingsPage';
 import { MachineAdminPage } from './MachineAdminPage';
 import { UsersPage } from './UsersPage';
 
-type SettingsTab = 'company' | 'users' | 'kpis' | 'machines' | 'backups' | 'audit';
+type SettingsTab = 'company' | 'users' | 'kpis' | 'machines' | 'database' | 'audit';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'company', label: 'Company Profile' },
   { id: 'users', label: 'Users & Roles' },
   { id: 'kpis', label: 'KPI Settings' },
   { id: 'machines', label: 'Ink & Machines' },
-  { id: 'backups', label: 'Database Backups' },
+  { id: 'database', label: 'Database Management' },
   { id: 'audit', label: 'Audit Logs' },
 ];
 
@@ -306,6 +307,124 @@ function BackupsTab() {
   );
 }
 
+// ── Reset Data (danger zone) ─────────────────────────────────────
+
+const CONFIRM_WORD = 'RESET';
+
+function ResetTab() {
+  const qc = useQueryClient();
+  const [target, setTarget] = useState<ResetModuleInfo | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const modulesQuery = useQuery({
+    queryKey: ['reset-modules'],
+    queryFn: async () => (await api.get<ResetModuleInfo[]>('/backups/reset/modules')).data,
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ label: string; deleted: number; backup: { filename: string } }>(`/backups/reset/${id}`),
+    onSuccess: (res) => {
+      setResult(
+        `${res.data.label}: ${res.data.deleted.toLocaleString()} record(s) deleted. Safety backup saved as ${res.data.backup.filename}.`,
+      );
+      setError('');
+      setTarget(null);
+      setConfirmText('');
+      qc.invalidateQueries({ queryKey: ['reset-modules'] });
+      qc.invalidateQueries({ queryKey: ['backups'] });
+    },
+    onError: () => setError('Reset failed — no data was changed. Ensure mysqldump is available on the server.'),
+  });
+
+  return (
+    <div>
+      <div className="card" style={{ borderColor: 'var(--warning)', background: 'var(--warning-light)', marginBottom: '1.25rem' }}>
+        <strong style={{ color: 'var(--warning)' }}>⚠ Danger zone</strong>
+        <p style={{ margin: '0.4rem 0 0', fontSize: '0.88rem' }}>
+          Resetting a module permanently deletes all of its records. A full database backup is created
+          automatically before every reset (available under Database Backups). Master data — users, clients,
+          products, machines, company profile — is never touched here.
+        </p>
+      </div>
+
+      {result && <p style={{ color: 'var(--success)', fontSize: '0.9rem' }}>✓ {result}</p>}
+      {modulesQuery.isLoading && <p>Loading modules…</p>}
+      {modulesQuery.isError && <p className="error-text">Failed to load modules.</p>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+        {modulesQuery.data?.map((m) => (
+          <div key={m.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 700 }}>{m.label}</span>
+              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: m.count > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
+                {m.count.toLocaleString()}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', flex: 1 }}>{m.description}</p>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ color: 'var(--danger)', borderColor: 'var(--danger)', alignSelf: 'flex-start', fontSize: '0.8rem', padding: '0.35rem 0.8rem' }}
+              disabled={m.count === 0}
+              onClick={() => { setResult(null); setError(''); setConfirmText(''); setTarget(m); }}
+            >
+              {m.count === 0 ? 'Empty' : 'Reset…'}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <Dialog isOpen={!!target} onClose={() => setTarget(null)} title={`Reset ${target?.label ?? ''}?`} maxWidth={460}>
+        {target && (
+          <div>
+            <p style={{ marginTop: 0, fontSize: '0.9rem' }}>
+              This permanently deletes <strong>{target.count.toLocaleString()}</strong> {target.label} record(s).
+              A full database backup is created first. This cannot be undone from within the app.
+            </p>
+            <div className="field">
+              <label>Type <strong>{CONFIRM_WORD}</strong> to confirm</label>
+              <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={CONFIRM_WORD} autoFocus />
+            </div>
+            {error && <p className="error-text">{error}</p>}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ flex: 1 }}
+                disabled={confirmText !== CONFIRM_WORD || resetMutation.isPending}
+                onClick={() => resetMutation.mutate(target.id)}
+              >
+                {resetMutation.isPending ? 'Backing up & resetting…' : `Delete all ${target.label}`}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setTarget(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Database Management (backups + reset) ─────────────────────────
+
+function DatabaseManagementTab() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+      <section>
+        <h2 style={{ fontSize: '1.05rem', margin: '0 0 0.85rem' }}>Database Backups</h2>
+        <BackupsTab />
+      </section>
+      <section>
+        <h2 style={{ fontSize: '1.05rem', margin: '0 0 0.85rem' }}>Reset Data</h2>
+        <ResetTab />
+      </section>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -345,7 +464,7 @@ export function SettingsPage() {
       {tab === 'users' && <UsersPage />}
       {tab === 'kpis' && <KpiSettingsPage />}
       {tab === 'machines' && <MachineAdminPage />}
-      {tab === 'backups' && <BackupsTab />}
+      {tab === 'database' && <DatabaseManagementTab />}
       {tab === 'audit' && <AuditLogsPage />}
     </div>
   );
