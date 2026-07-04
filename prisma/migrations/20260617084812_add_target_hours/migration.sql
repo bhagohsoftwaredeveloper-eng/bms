@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `dev_projects` ADD COLUMN `target_hours` DOUBLE NULL;

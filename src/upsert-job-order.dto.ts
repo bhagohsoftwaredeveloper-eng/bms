@@ -1,0 +1,76 @@
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { DiscountType, JobOrderStatus, JobOrderType } from '@prisma/client';
+
+export class JobOrderItemDto {
+  @IsString()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @IsNumber()
+  @Min(0)
+  unitPrice!: number;
+}
+
+export class UpsertJobOrderDto {
+  @IsEnum(JobOrderType)
+  @IsOptional()
+  type?: JobOrderType;
+
+  @IsOptional()
+  @IsString()
+  jobId?: string;
+
+  @IsOptional()
+  @IsString()
+  designJobId?: string;
+
+  @IsString()
+  clientId!: string;
+
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsNumber()
+  @Min(0)
+  salePrice!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discount?: number;
+
+  @IsOptional()
+  @IsEnum(DiscountType)
+  discountType?: DiscountType;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string;
+
+  @IsOptional()
+  @IsEnum(JobOrderStatus)
+  status?: JobOrderStatus;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JobOrderItemDto)
+  items!: JobOrderItemDto[];
+}

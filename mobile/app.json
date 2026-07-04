@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Beulah Field",
+    "slug": "beulah-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "beulah",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#4f46e5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.beulah.field"
+    },
+    "android": {
+      "package": "com.beulah.field",
+      "adaptiveIcon": {
+        "backgroundColor": "#4f46e5"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "Allow Beulah Field to capture the installation location for proof of service." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Allow Beulah Field to attach installation photos as proof of service." }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://192.168.1.246:3001/api"
+    }
+  }
+}

@@ -1,0 +1,760 @@
+// Prisma schema for the Software Deployment & License Management Platform (SDLMP)
+// See project spec for module breakdown: clients, products, licenses, jobs, earnings, withdrawals, audit logs.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  SUPER_ADMIN
+  INSTALLER
+  DEVELOPER
+  DESIGNER
+  MACHINE_OPERATOR
+  LIAISON
+  ADMIN_STAFF
+  SALES_STAFF
+}
+
+enum IncentiveStatus {
+  PENDING
+  APPROVED
+  PAID
+}
+
+enum ClientStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
+}
+
+enum ClientType {
+  SOFTWARE
+  ADVERTISING
+}
+
+enum LicenseType {
+  SUBSCRIPTION_MONTHLY
+  SUBSCRIPTION_ANNUAL
+  LIFETIME
+}
+
+enum LicenseStatus {
+  PENDING
+  ACTIVATED
+  EXPIRED
+  SUSPENDED
+}
+
+enum JobStatus {
+  ASSIGNED
+  ON_GOING
+  WAITING_ACTIVATION
+  COMPLETED
+  CANCELLED
+}
+
+enum EarningType {
+  INSTALLATION
+  ACTIVATION
+  BONUS
+  COMMISSION
+}
+
+enum EarningStatus {
+  PENDING
+  APPROVED
+  PAID
+}
+
+enum WithdrawalMethod {
+  GCASH
+  MAYA
+  BANK_TRANSFER
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RELEASED
+}
+
+enum DiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+enum JobOrderType {
+  SOFTWARE
+  DESIGN
+}
+
+enum JobOrderStatus {
+  DRAFT
+  FINALIZED
+  ON_GOING
+  COMPLETED
+  CANCELLED
+}
+
+enum DesignJobStatus {
+  PENDING
+  ASSIGNED
+  ON_GOING
+  COMPLETED
+  CANCELLED
+}
+
+enum DevProjectStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PENDING
+  COMPLETED
+}
+
+enum DevReportStatus {
+  PENDING
+  REVIEWED
+}
+
+// ---------------------------------------------------------------------------
+// Users & Auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  role         UserRole
+  phone        String?
+  isActive     Boolean  @default(true) @map("is_active")
+
+  // Per-user base bonus (salary grade) used as the basis for KPI incentive
+  // computation: incentive = baseBonus * incentivePct(totalScore).
+  baseBonus    Decimal  @default(10000) @db.Decimal(12, 2) @map("base_bonus")
+
+  // Super Admin MFA (Google Authenticator OTP)
+  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
+  mfaSecret    String?  @map("mfa_secret")
+  refreshToken String?  @map("refresh_token")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  installerJobs     Job[]                @relation("InstallerJobs")
+  developerLicenses License[]            @relation("DeveloperActivations")
+  earnings          Earning[]
+  withdrawals       Withdrawal[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  deviceTokens      DeviceToken[]
+  kpiResults        KpiResult[]
+  incentives        Incentive[]
+  additionalRoles   UserRoleAssignment[]
+  designJobsCreated  DesignJob[]       @relation("DesignJobCreator")
+  designJobsAssigned DesignJob[]       @relation("DesignJobOperator")
+  designJobUpdates   DesignJobUpdate[]
+
+  devProjects        DevProject[]               @relation("DevProjectDeveloper")
+  devReportsAuthored DevProjectReport[]          @relation("DevReportAuthor")
+  devReportsTagged   DevProjectReport[]          @relation("DevReportTaggedAdmin")
+  devReportFeedback  DevProjectReportFeedback[]  @relation("DevReportFeedbackAuthor")
+
+  @@map("users")
+}
+
+// Additional roles a user can have beyond their primary role
+model UserRoleAssignment {
+  id     String   @id @default(uuid())
+  userId String   @map("user_id")
+  role   UserRole
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_role_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Client Management
+// ---------------------------------------------------------------------------
+
+model Client {
+  id           String       @id @default(uuid())
+  clientCode   String       @unique @map("client_code")
+  businessName String       @map("business_name")
+  ownerName    String       @map("owner_name")
+  contactNo    String       @map("contact_no")
+  email        String?
+  address      String?
+  status       ClientStatus @default(ACTIVE)
+  clientType   ClientType   @default(SOFTWARE) @map("client_type")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  licenses   License[]
+  jobs       Job[]
+  jobOrders  JobOrder[]
+
+  @@map("clients")
+}
+
+// ---------------------------------------------------------------------------
+// Software Products
+// ---------------------------------------------------------------------------
+
+model SoftwareProduct {
+  id             String      @id @default(uuid())
+  productName    String      @map("product_name")
+  version        String
+  licenseType    LicenseType @map("license_type")
+  price          Decimal     @db.Decimal(12, 2)
+  maintenanceFee Decimal?    @db.Decimal(12, 2) @map("maintenance_fee")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  licenses   License[]
+  jobOrders  JobOrder[]
+
+  @@map("software_products")
+}
+
+// ---------------------------------------------------------------------------
+// License Management
+// ---------------------------------------------------------------------------
+
+model License {
+  id             String        @id @default(uuid())
+  licenseKey     String        @unique @map("license_key")
+  clientId       String        @map("client_id")
+  productId      String        @map("product_id")
+  activatedById  String?       @map("activated_by")
+  activationDate DateTime?     @map("activation_date")
+  expirationDate DateTime?     @map("expiration_date")
+  status         LicenseStatus @default(PENDING)
+
+  // Activation security: JWT license token + RSA-4096 signature + hardware fingerprint
+  licenseToken        String? @map("license_token") @db.Text
+  hardwareFingerprint Json?   @map("hardware_fingerprint")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  client      Client          @relation(fields: [clientId], references: [id])
+  product     SoftwareProduct @relation(fields: [productId], references: [id])
+  activatedBy User?           @relation("DeveloperActivations", fields: [activatedById], references: [id])
+  jobs        Job[]
+
+  @@map("licenses")
+}
+
+// ---------------------------------------------------------------------------
+// Installer Job Module
+// ---------------------------------------------------------------------------
+
+model Job {
+  id           String    @id @default(uuid())
+  clientId     String    @map("client_id")
+  installerId  String?   @map("installer_id")
+  licenseId    String?   @map("license_id")
+  scheduleDate DateTime  @map("schedule_date")
+  jobStatus    JobStatus @default(ASSIGNED) @map("job_status")
+  remarks      String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  client    Client             @relation(fields: [clientId], references: [id])
+  installer User?              @relation("InstallerJobs", fields: [installerId], references: [id])
+  license   License?           @relation(fields: [licenseId], references: [id])
+  proof     InstallationProof?
+  earnings  Earning[]
+  jobOrder  JobOrder?
+
+  @@map("jobs")
+}
+
+// Proof of installation required before activation can be requested.
+model InstallationProof {
+  id              String   @id @default(uuid())
+  jobId           String   @unique @map("job_id")
+  clientSignature String?  @map("client_signature_url")
+  photoUrls       Json     @map("photo_urls")
+  deviceInfo      Json?    @map("device_info")
+  gpsLatitude     Decimal? @db.Decimal(10, 7) @map("gps_latitude")
+  gpsLongitude    Decimal? @db.Decimal(10, 7) @map("gps_longitude")
+  capturedAt      DateTime @default(now()) @map("captured_at")
+
+  job Job @relation(fields: [jobId], references: [id])
+
+  @@map("installation_proofs")
+}
+
+// ---------------------------------------------------------------------------
+// Earnings & Withdrawals
+// ---------------------------------------------------------------------------
+
+model Earning {
+  id          String        @id @default(uuid())
+  userId      String        @map("user_id")
+  jobId       String?       @map("job_id")
+  incentiveId String?       @unique @map("incentive_id")
+  amount      Decimal       @db.Decimal(12, 2)
+  type        EarningType
+  status      EarningStatus @default(PENDING)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id])
+  job       Job?       @relation(fields: [jobId], references: [id])
+  incentive Incentive? @relation(fields: [incentiveId], references: [id])
+
+  @@map("earnings")
+}
+
+model Withdrawal {
+  id            String           @id @default(uuid())
+  userId        String           @map("user_id")
+  amount        Decimal          @db.Decimal(12, 2)
+  method        WithdrawalMethod
+  accountName   String           @map("account_name")
+  accountNumber String           @map("account_number")
+  status        WithdrawalStatus @default(PENDING)
+  proofUrl      String?          @map("proof_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("withdrawals")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (Firebase Cloud Messaging)
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  title     String
+  body      String
+  eventType String    @map("event_type")
+  data      Json?
+  readAt    DateTime? @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+// Firebase Cloud Messaging device/registration tokens for push notifications.
+// One user can have several (phone, tablet, web). Invalid tokens are pruned
+// automatically when FCM reports them as unregistered.
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String?  // 'android' | 'ios' | 'web'
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("device_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Job Orders
+// ---------------------------------------------------------------------------
+
+model JobOrder {
+  id           String         @id @default(uuid())
+  type         JobOrderType   @default(SOFTWARE)
+  jobId        String?        @unique @map("job_id")
+  designJobId  String?        @unique @map("design_job_id")
+  clientId     String         @map("client_id")
+  productId    String?        @map("product_id")
+  salePrice    Decimal        @db.Decimal(12, 2) @map("sale_price")
+  discount     Decimal        @default(0) @db.Decimal(12, 2)
+  discountType DiscountType   @default(FIXED) @map("discount_type")
+  remarks      String?        @db.Text
+  status       JobOrderStatus @default(DRAFT)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  job       Job?             @relation(fields: [jobId], references: [id])
+  designJob DesignJob?       @relation(fields: [designJobId], references: [id])
+  client    Client           @relation(fields: [clientId], references: [id])
+  product   SoftwareProduct? @relation(fields: [productId], references: [id])
+  items     JobOrderItem[]
+
+  @@map("job_orders")
+}
+
+model JobOrderItem {
+  id          String  @id @default(uuid())
+  jobOrderId  String  @map("job_order_id")
+  name        String
+  description String? @db.Text
+  quantity    Int     @default(1)
+  unitPrice   Decimal @db.Decimal(12, 2) @map("unit_price")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  jobOrder JobOrder @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+
+  @@map("job_order_items")
+}
+
+// ---------------------------------------------------------------------------
+// KPI & Incentives
+// ---------------------------------------------------------------------------
+
+model KpiResult {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  month       Int
+  year        Int
+  kpiName     String   @map("kpi_name")
+  actualValue Decimal  @db.Decimal(10, 2) @map("actual_value")
+  targetValue Decimal  @db.Decimal(10, 2) @map("target_value")
+  weight      Decimal  @db.Decimal(5, 2)
+  score       Decimal  @db.Decimal(5, 2)
+  isManual    Boolean  @default(false) @map("is_manual")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year, kpiName])
+  @@map("kpi_results")
+}
+
+model Incentive {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  month       Int
+  year        Int
+  totalScore  Decimal         @db.Decimal(5, 2) @map("total_score")
+  baseBonus   Decimal         @db.Decimal(12, 2) @default(10000) @map("base_bonus")
+  bonusAmount Decimal         @db.Decimal(12, 2) @map("bonus_amount")
+  status      IncentiveStatus @default(PENDING)
+  remarks     String?         @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  earning Earning?
+
+  @@unique([userId, month, year])
+  @@map("incentives")
+}
+
+// Per-role KPI definitions. Seeded from built-in defaults on first access;
+// admins can add/edit/remove custom KPIs per role from there on.
+model KpiDefinition {
+  id        String   @id @default(uuid())
+  role      UserRole
+  name      String
+  weight    Decimal  @db.Decimal(5, 2)
+  target    Decimal  @db.Decimal(10, 2)
+  unit      String
+  auto      Boolean  @default(false)
+  isCustom  Boolean  @default(true) @map("is_custom")
+  sortOrder Int      @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([role, name])
+  @@map("kpi_definitions")
+}
+
+// ---------------------------------------------------------------------------
+// Company Profile (singleton settings record)
+// ---------------------------------------------------------------------------
+
+model CompanyProfile {
+  id           String  @id @default(uuid())
+  businessName String  @map("business_name")
+  address      String? @db.Text
+  phone        String?
+  email        String?
+  website      String?
+  tin          String?
+  logoUrl      String? @db.Text @map("logo_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("company_profile")
+}
+
+// ---------------------------------------------------------------------------
+// Audit Logs
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  action    String
+  ipAddress String?  @map("ip_address")
+  device    String?
+  metadata  Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Machine & Ink Management (for printing machines)
+// ---------------------------------------------------------------------------
+
+enum PrinterMachineModel {
+  TS100_1600_SUBLIMATION
+  JV100_160
+  UCJV300_160
+}
+
+enum InkColor {
+  BLACK
+  CYAN
+  MAGENTA
+  YELLOW
+  CLEAR
+  WHITE
+}
+
+model PrinterMachine {
+  id        String               @id @default(uuid())
+  model     PrinterMachineModel
+  label     String               @unique // e.g., "Machine 1", "Machine 2"
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  machineInks   MachineInk[]
+  inkLogs       InkUsageLog[]
+  refillLogs    InkRefillLog[]
+
+  @@map("printer_machines")
+}
+
+model MachineInk {
+  id            String    @id @default(uuid())
+  machineId     String    @map("machine_id")
+  inkColor      InkColor  @map("ink_color")
+  maxCapacity   Float     @map("max_capacity") // in cc
+  currentUsage  Float     @default(0) @map("current_usage") // in cc
+  lastRefillAt  DateTime? @map("last_refill_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  machine       PrinterMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  usageLogs     InkUsageLog[]
+  refillLogs    InkRefillLog[]
+
+  @@unique([machineId, inkColor])
+  @@map("machine_inks")
+}
+
+model InkUsageLog {
+  id           String   @id @default(uuid())
+  machineId    String   @map("machine_id")
+  machineInkId String   @map("machine_ink_id")
+  amountUsed   Float    @map("amount_used") // in cc
+  jobReference String?  @map("job_reference") // optional reference to job
+  notes        String?  @db.Text
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+  recordedBy   String?  @map("recorded_by") // user ID of machine operator
+
+  machine     PrinterMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  machineInk  MachineInk     @relation(fields: [machineInkId], references: [id], onDelete: Cascade)
+
+  @@map("ink_usage_logs")
+}
+
+model InkRefillLog {
+  id           String   @id @default(uuid())
+  machineId    String   @map("machine_id")
+  machineInkId String   @map("machine_ink_id")
+  previousUsage Float  @map("previous_usage") // in cc before refill
+  newUsage     Float   @map("new_usage") // in cc after refill (should be 0 or close to 0)
+  refillDate   DateTime @default(now()) @map("refill_date")
+  refillBy     String?  @map("refill_by") // user ID of admin who reset
+  notes        String?  @db.Text
+
+  machine    PrinterMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  machineInk MachineInk     @relation(fields: [machineInkId], references: [id], onDelete: Cascade)
+
+  @@map("ink_refill_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Designer Portal: Advertising Job Orders
+// ---------------------------------------------------------------------------
+
+model DesignJob {
+  id          String          @id @default(uuid())
+  title       String
+  description String?         @db.Text
+  clientName  String?         @map("client_name")
+  designerId  String          @map("designer_id")
+  operatorId  String?         @map("operator_id")
+  status      DesignJobStatus @default(PENDING)
+  dueDate     DateTime?       @map("due_date")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  designer User              @relation("DesignJobCreator", fields: [designerId], references: [id])
+  operator User?             @relation("DesignJobOperator", fields: [operatorId], references: [id])
+  updates  DesignJobUpdate[]
+  jobOrder JobOrder?
+
+  @@map("design_jobs")
+}
+
+model DesignJobUpdate {
+  id          String           @id @default(uuid())
+  designJobId String           @map("design_job_id")
+  authorId    String           @map("author_id")
+  message     String?          @db.Text
+  status      DesignJobStatus?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  designJob DesignJob @relation(fields: [designJobId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@map("design_job_updates")
+}
+
+// ---------------------------------------------------------------------------
+// Developer Portal: Software Development Progress Tracking
+// ---------------------------------------------------------------------------
+
+// A piece of software under active development, tracked by a developer.
+// The developer manually starts/stops a timer while working on it; total
+// tracked time and a manually-set progress percentage are visible to admins.
+model DevProject {
+  id              String           @id @default(uuid())
+  name            String
+  description     String?          @db.Text
+  developerId     String           @map("developer_id")
+  status          DevProjectStatus @default(NOT_STARTED)
+  progressPercent Int              @default(0) @map("progress_percent")
+  totalMinutes    Int              @default(0) @map("total_minutes")
+  targetHours     Float?           @map("target_hours")
+  projectStart    DateTime?        @map("project_start")
+  projectDeadline DateTime?        @map("project_deadline")
+  startedAt       DateTime?        @map("started_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  developer User                @relation("DevProjectDeveloper", fields: [developerId], references: [id])
+  sessions  DevProjectSession[]
+  reports   DevProjectReport[]
+
+  @@map("dev_projects")
+}
+
+// One start/stop work session for a DevProject.
+model DevProjectSession {
+  id        String    @id @default(uuid())
+  projectId String    @map("project_id")
+  startedAt DateTime  @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  minutes   Int?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("dev_project_sessions")
+}
+
+// A checklist + comment report posted by the developer, tagged to an admin for review.
+model DevProjectReport {
+  id            String          @id @default(uuid())
+  projectId     String          @map("project_id")
+  authorId      String          @map("author_id")
+  title         String
+  comment       String?         @db.Text
+  checklist     Json
+  taggedAdminId String?         @map("tagged_admin_id")
+  status        DevReportStatus @default(PENDING)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project     DevProject                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author      User                       @relation("DevReportAuthor", fields: [authorId], references: [id])
+  taggedAdmin User?                      @relation("DevReportTaggedAdmin", fields: [taggedAdminId], references: [id])
+  feedback    DevProjectReportFeedback[]
+
+  @@map("dev_project_reports")
+}
+
+// ---------------------------------------------------------------------------
+// NENPOS Clients (legacy / pre-system installed clients, uploaded via Excel)
+// ---------------------------------------------------------------------------
+
+model NenposClient {
+  id         String    @id @default(uuid())
+  clientId   String    @map("client_id")
+  clientName String    @map("client_name")
+  startDate  DateTime? @map("start_date")
+  expiryDate DateTime? @map("expiry_date")
+  license    String?
+  status     String    @default("ACTIVE")
+  installer  String?
+  notes      String?   @db.Text
+  address    String?   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("nenpos_clients")
+}
+
+// Feedback left by the tagged admin on a developer's report.
+model DevProjectReportFeedback {
+  id       String @id @default(uuid())
+  reportId String @map("report_id")
+  authorId String @map("author_id")
+  message  String @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  report DevProjectReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  author User             @relation("DevReportFeedbackAuthor", fields: [authorId], references: [id])
+
+  @@map("dev_project_report_feedback")
+}

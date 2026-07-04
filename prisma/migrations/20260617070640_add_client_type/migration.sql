@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `clients` ADD COLUMN `client_type` ENUM('SOFTWARE', 'ADVERTISING') NOT NULL DEFAULT 'SOFTWARE';

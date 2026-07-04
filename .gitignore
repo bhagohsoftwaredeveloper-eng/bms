@@ -1,0 +1,16 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+
+# Generated RSA key pair used to sign license activation tokens
+/keys
+
+# Added by audit
+dist
+/backups
+/uploads
+*.log
+.expo
+.DS_Store
