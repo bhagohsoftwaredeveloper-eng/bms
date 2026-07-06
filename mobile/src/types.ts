@@ -3,7 +3,6 @@ export type UserRole =
   | 'INSTALLER'
   | 'DEVELOPER'
   | 'DESIGNER'
-  | 'MACHINE_OPERATOR'
   | 'LIAISON'
   | 'ADMIN_STAFF'
   | 'SALES_STAFF';
