@@ -26,7 +26,6 @@ const RESOURCE_NAMES: Record<string, string> = {
   kpis: 'KPI',
   'company-profile': 'Company Profile',
   backups: 'Backup',
-  machines: 'Machine',
 };
 
 const ACTION_VERBS: Record<string, string> = {

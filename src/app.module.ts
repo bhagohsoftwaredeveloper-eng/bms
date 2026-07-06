@@ -18,7 +18,6 @@ import { JobOrdersModule } from './job-orders.module';
 import { JobsModule } from './jobs.module';
 import { KpisModule } from './kpis.module';
 import { LicensesModule } from './licenses.module';
-import { MachinesModule } from './machines.module';
 import { NotificationsModule } from './notifications.module';
 import { PrismaModule } from './prisma.module';
 import { SoftwareProductsModule } from './software-products.module';
@@ -51,7 +50,6 @@ import { WithdrawalsModule } from './withdrawals.module';
     CompanyProfileModule,
     BackupsModule,
     UploadsModule,
-    MachinesModule,
     DevProjectsModule,
     NenposClientsModule,
   ],
