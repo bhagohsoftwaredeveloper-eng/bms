@@ -11,7 +11,6 @@ import { BackupsModule } from './backups.module';
 import { ClientsModule } from './clients.module';
 import { AuditLogInterceptor } from './audit-log.interceptor';
 import { CompanyProfileModule } from './company-profile.module';
-import { DesignJobsModule } from './design-jobs.module';
 import { DevProjectsModule } from './dev-projects.module';
 import { EarningsModule } from './earnings.module';
 import { InventoryModule } from './inventory.module';
@@ -53,7 +52,6 @@ import { WithdrawalsModule } from './withdrawals.module';
     BackupsModule,
     UploadsModule,
     MachinesModule,
-    DesignJobsModule,
     DevProjectsModule,
     NenposClientsModule,
   ],
