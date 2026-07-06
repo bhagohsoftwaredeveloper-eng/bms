@@ -26,6 +26,11 @@ export class JobOrderItemDto {
   @IsNumber()
   @Min(0)
   unitPrice!: number;
+
+  /** Links this line to an inventory item so stock deducts when the order completes. */
+  @IsOptional()
+  @IsString()
+  inventoryItemId?: string;
 }
 
 export class UpsertJobOrderDto {

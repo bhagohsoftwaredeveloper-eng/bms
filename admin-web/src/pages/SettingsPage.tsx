@@ -4,17 +4,19 @@ import { api } from '../lib/api';
 import type { BackupFile, CompanyProfile, ResetModuleInfo } from '../lib/types';
 import { Dialog } from '../components/Dialog';
 import { AuditLogsPage } from './AuditLogsPage';
+import { InventoryPage } from './InventoryPage';
 import { KpiSettingsPage } from './KpiSettingsPage';
 import { MachineAdminPage } from './MachineAdminPage';
 import { UsersPage } from './UsersPage';
 
-type SettingsTab = 'company' | 'users' | 'kpis' | 'machines' | 'database' | 'audit';
+type SettingsTab = 'company' | 'users' | 'kpis' | 'machines' | 'inventory' | 'database' | 'audit';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'company', label: 'Company Profile' },
   { id: 'users', label: 'Users & Roles' },
   { id: 'kpis', label: 'KPI Settings' },
   { id: 'machines', label: 'Ink & Machines' },
+  { id: 'inventory', label: 'Inventory Management' },
   { id: 'database', label: 'Database Management' },
   { id: 'audit', label: 'Audit Logs' },
 ];
@@ -315,6 +317,9 @@ function ResetTab() {
   const qc = useQueryClient();
   const [target, setTarget] = useState<ResetModuleInfo | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [password, setPassword] = useState('');
+  const [backupState, setBackupState] = useState<'idle' | 'downloading' | 'done'>('idle');
+  const [backupFilename, setBackupFilename] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState('');
 
@@ -323,9 +328,43 @@ function ResetTab() {
     queryFn: async () => (await api.get<ResetModuleInfo[]>('/backups/reset/modules')).data,
   });
 
+  const openDialog = (m: ResetModuleInfo | null) => {
+    setError('');
+    setConfirmText('');
+    setPassword('');
+    setBackupState('idle');
+    setBackupFilename(null);
+    setTarget(m);
+  };
+
+  // Step 1: create a full DB backup and download it to the user's computer before any wipe.
+  const downloadBackup = async () => {
+    setError('');
+    setBackupState('downloading');
+    try {
+      const created = (await api.post<BackupFile>('/backups')).data;
+      const res = await api.get(`/backups/${encodeURIComponent(created.filename)}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = created.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      setBackupFilename(created.filename);
+      setBackupState('done');
+      qc.invalidateQueries({ queryKey: ['backups'] });
+    } catch {
+      setBackupState('idle');
+      setError('Backup failed — make sure mysqldump is available on the server. Reset is blocked until a backup is downloaded.');
+    }
+  };
+
   const resetMutation = useMutation({
     mutationFn: (id: string) =>
-      api.post<{ label: string; deleted: number; backup: { filename: string } }>(`/backups/reset/${id}`),
+      api.post<{ label: string; deleted: number; backup: { filename: string } }>(`/backups/reset/${id}`, {
+        password,
+        backupFilename,
+      }),
     onSuccess: (res) => {
       setResult(
         `${res.data.label}: ${res.data.deleted.toLocaleString()} record(s) deleted. Safety backup saved as ${res.data.backup.filename}.`,
@@ -333,19 +372,32 @@ function ResetTab() {
       setError('');
       setTarget(null);
       setConfirmText('');
+      setPassword('');
+      setBackupState('idle');
+      setBackupFilename(null);
       qc.invalidateQueries({ queryKey: ['reset-modules'] });
       qc.invalidateQueries({ queryKey: ['backups'] });
     },
-    onError: () => setError('Reset failed — no data was changed. Ensure mysqldump is available on the server.'),
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setError(
+        status === 401
+          ? 'Incorrect password — no data was changed.'
+          : 'Reset failed — no data was changed. Ensure mysqldump is available on the server.',
+      );
+    },
   });
+
+  const canDelete =
+    backupState === 'done' && password.length > 0 && confirmText === CONFIRM_WORD && !resetMutation.isPending;
 
   return (
     <div>
       <div className="card" style={{ borderColor: 'var(--warning)', background: 'var(--warning-light)', marginBottom: '1.25rem' }}>
         <strong style={{ color: 'var(--warning)' }}>⚠ Danger zone</strong>
         <p style={{ margin: '0.4rem 0 0', fontSize: '0.88rem' }}>
-          Resetting a module permanently deletes all of its records. A full database backup is created
-          automatically before every reset (available under Database Backups). Master data — users, clients,
+          Resetting a module permanently deletes all of its records. Before it runs you must download a full
+          database backup and confirm with your own login password. Master data — users, clients,
           products, machines, company profile — is never touched here.
         </p>
       </div>
@@ -369,7 +421,7 @@ function ResetTab() {
               className="btn btn-secondary"
               style={{ color: 'var(--danger)', borderColor: 'var(--danger)', alignSelf: 'flex-start', fontSize: '0.8rem', padding: '0.35rem 0.8rem' }}
               disabled={m.count === 0}
-              onClick={() => { setResult(null); setError(''); setConfirmText(''); setTarget(m); }}
+              onClick={() => { setResult(null); openDialog(m); }}
             >
               {m.count === 0 ? 'Empty' : 'Reset…'}
             </button>
@@ -382,22 +434,63 @@ function ResetTab() {
           <div>
             <p style={{ marginTop: 0, fontSize: '0.9rem' }}>
               This permanently deletes <strong>{target.count.toLocaleString()}</strong> {target.label} record(s).
-              A full database backup is created first. This cannot be undone from within the app.
+              This cannot be undone from within the app. Complete all three steps below.
             </p>
+
+            {/* Step 1 — download backup */}
             <div className="field">
-              <label>Type <strong>{CONFIRM_WORD}</strong> to confirm</label>
-              <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={CONFIRM_WORD} autoFocus />
+              <label>Step 1 — Download a backup first</label>
+              {backupState === 'done' ? (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--success)' }}>
+                  ✓ Backup downloaded: {backupFilename}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ marginTop: '0.25rem' }}
+                  disabled={backupState === 'downloading'}
+                  onClick={downloadBackup}
+                >
+                  {backupState === 'downloading' ? 'Creating & downloading…' : 'Create & download backup'}
+                </button>
+              )}
             </div>
+
+            {/* Step 2 — password */}
+            <div className="field">
+              <label>Step 2 — Confirm with your login password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your login password"
+                autoComplete="current-password"
+                disabled={backupState !== 'done'}
+              />
+            </div>
+
+            {/* Step 3 — type RESET */}
+            <div className="field">
+              <label>Step 3 — Type <strong>{CONFIRM_WORD}</strong> to confirm</label>
+              <input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={CONFIRM_WORD}
+                disabled={backupState !== 'done'}
+              />
+            </div>
+
             {error && <p className="error-text">{error}</p>}
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
               <button
                 type="button"
                 className="btn btn-danger"
                 style={{ flex: 1 }}
-                disabled={confirmText !== CONFIRM_WORD || resetMutation.isPending}
+                disabled={!canDelete}
                 onClick={() => resetMutation.mutate(target.id)}
               >
-                {resetMutation.isPending ? 'Backing up & resetting…' : `Delete all ${target.label}`}
+                {resetMutation.isPending ? 'Resetting…' : `Delete all ${target.label}`}
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => setTarget(null)}>Cancel</button>
             </div>
@@ -464,6 +557,7 @@ export function SettingsPage() {
       {tab === 'users' && <UsersPage />}
       {tab === 'kpis' && <KpiSettingsPage />}
       {tab === 'machines' && <MachineAdminPage />}
+      {tab === 'inventory' && <InventoryPage />}
       {tab === 'database' && <DatabaseManagementTab />}
       {tab === 'audit' && <AuditLogsPage />}
     </div>

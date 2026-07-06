@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from './prisma.service';
 import { BackupsService, type BackupFile } from './backups.service';
 
@@ -166,16 +167,31 @@ export class ResetService {
     );
   }
 
-  async reset(moduleId: string): Promise<ResetResult> {
+  async reset(
+    moduleId: string,
+    userId: string,
+    password: string,
+    backupFilename?: string,
+  ): Promise<ResetResult> {
     const mod = MODULES.find((m) => m.id === moduleId);
     if (!mod) throw new BadRequestException(`Unknown module: ${moduleId}`);
 
+    // Verify the requester's own login password before anything is touched.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
     const deleted = await mod.count(this.prisma);
 
-    // Safety net: always take a full backup before wiping. Abort if it fails.
+    // Safety net: reuse the backup the client already downloaded if one was passed
+    // (and still exists), otherwise take a fresh full backup. Abort if it fails.
     let backup: BackupFile;
     try {
-      backup = await this.backups.create();
+      backup = backupFilename ? await this.tryReuseBackup(backupFilename) : await this.backups.create();
     } catch {
       throw new BadRequestException(
         'Auto-backup failed (is mysqldump available on the server?). Reset aborted for safety.',
@@ -185,5 +201,14 @@ export class ResetService {
     await this.prisma.$transaction((tx) => mod.reset(tx));
 
     return { module: mod.id, label: mod.label, deleted, backup };
+  }
+
+  /** Reuse an already-created backup by filename; fall back to a fresh dump if it's gone. */
+  private async tryReuseBackup(filename: string): Promise<BackupFile> {
+    try {
+      return this.backups.get(filename);
+    } catch {
+      return this.backups.create();
+    }
   }
 }

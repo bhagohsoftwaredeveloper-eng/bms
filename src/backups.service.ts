@@ -79,6 +79,12 @@ export class BackupsService {
     return { filename, size: stats.size, createdAt: stats.birthtime };
   }
 
+  get(filename: string): BackupFile {
+    const filePath = this.getFilePath(filename);
+    const stats = statSync(filePath);
+    return { filename, size: stats.size, createdAt: stats.birthtime };
+  }
+
   getFilePath(filename: string): string {
     if (!FILENAME_RE.test(filename)) throw new NotFoundException('Backup not found');
     const filePath = join(BACKUP_DIR, filename);

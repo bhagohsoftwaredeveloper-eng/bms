@@ -138,6 +138,7 @@ export interface JobOrderItem {
   description: string | null;
   quantity: number;
   unitPrice: string;
+  inventoryItemId: string | null;
   createdAt: string;
 }
 
@@ -393,4 +394,32 @@ export interface ResetModuleInfo {
   label: string;
   description: string;
   count: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  description: string | null;
+  barcode: string | null;
+  unitPrice: string; // Decimal serialized as string
+  stockQty: number;
+  lowStockAlert: number;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StockMovementReason = 'MANUAL_ADJUST' | 'JOB_ORDER_DEDUCTION' | 'JOB_ORDER_RESTORE';
+
+export interface StockMovement {
+  id: string;
+  inventoryItemId: string;
+  delta: number;
+  balance: number;
+  reason: StockMovementReason;
+  jobOrderId: string | null;
+  note: string | null;
+  userId: string | null;
+  createdAt: string;
 }

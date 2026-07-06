@@ -1,11 +1,14 @@
-import { Controller, Delete, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import type { Response } from 'express';
 import { Roles } from './roles.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { CurrentUser } from './current-user.decorator';
+import type { AuthenticatedUser } from './authenticated-user.type';
 import { BackupsService } from './backups.service';
 import { ResetService } from './reset.service';
+import { ResetModuleDto } from './reset-module.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SUPER_ADMIN)
@@ -43,7 +46,11 @@ export class BackupsController {
   }
 
   @Post('reset/:moduleId')
-  resetModule(@Param('moduleId') moduleId: string) {
-    return this.resetService.reset(moduleId);
+  resetModule(
+    @Param('moduleId') moduleId: string,
+    @Body() dto: ResetModuleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.resetService.reset(moduleId, user.id, dto.password, dto.backupFilename);
   }
 }

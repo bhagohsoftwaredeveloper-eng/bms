@@ -32,27 +32,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { useAuthStore } from '../lib/auth-store';
-import type { Client, CompanyProfile, DiscountType, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct, DesignJob } from '../lib/types';
+import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct, DesignJob } from '../lib/types';
 
-// ─── Preset hardware items ───────────────────────────────────────────────────
-
-interface Preset {
-  name: string;
-  description: string;
-}
-
-const PRESETS: Preset[] = [
-  { name: 'Complete Set', description: 'Computer/PC, Cash Drawer, Thermal Printer 80mm' },
-  { name: 'Computer / PC', description: 'Desktop computer unit' },
-  { name: 'Cash Drawer', description: 'Standard cash drawer' },
-  { name: 'Thermal Printer 80mm', description: '80mm thermal receipt printer' },
-  { name: 'Thermal Printer 58mm', description: '58mm thermal receipt printer' },
-  { name: 'UPS / AVR', description: 'Uninterruptible power supply / automatic voltage regulator' },
-  { name: 'Barcode Scanner', description: 'USB barcode scanner' },
-  { name: 'Network Switch', description: 'Ethernet network switch' },
-  { name: 'Keyboard & Mouse', description: 'Wired keyboard and mouse set' },
-  { name: 'Monitor', description: 'LCD/LED monitor' },
-];
+// Quick-add materials now come from the Inventory (Settings → Inventory Management).
 
 // ─── Client picker with live search + quick-add ───────────────────────────────
 
@@ -191,6 +173,7 @@ function generateClientCode(): string {
 
 interface LineItem {
   _key: string; // local only
+  inventoryItemId?: string | null; // links to InventoryItem (used for stock deduction in Phase 2)
   name: string;
   description: string;
   quantity: number;
@@ -203,6 +186,7 @@ const newKey = () => String(++keySeq);
 function fromSaved(item: JobOrderItem): LineItem {
   return {
     _key: newKey(),
+    inventoryItemId: item.inventoryItemId ?? null,
     name: item.name,
     description: item.description ?? '',
     quantity: item.quantity,
@@ -314,6 +298,10 @@ export function JobOrderPage() {
     queryKey: ['products'],
     queryFn: async () => (await api.get<SoftwareProduct[]>('/software-products')).data,
   });
+  const inventoryQuery = useQuery({
+    queryKey: ['inventory'],
+    queryFn: async () => (await api.get<InventoryItem[]>('/inventory')).data,
+  });
   const companyProfileQuery = useQuery({
     queryKey: ['company-profile'],
     queryFn: async () => (await api.get<CompanyProfile>('/company-profile')).data,
@@ -415,11 +403,12 @@ export function JobOrderPage() {
           discountType,
           remarks: remarks || undefined,
           status,
-          items: items.map(({ name, description, quantity, unitPrice }) => ({
+          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId }) => ({
             name,
             description: description || undefined,
             quantity,
             unitPrice,
+            inventoryItemId: inventoryItemId ?? undefined,
           })),
         })
       ).data,
@@ -472,8 +461,35 @@ export function JobOrderPage() {
   });
 
   // ── Item helpers ──
-  const addPreset = (preset: Preset) => {
-    setItems((prev) => [...prev, { _key: newKey(), name: preset.name, description: preset.description, quantity: 1, unitPrice: 0 }]);
+  const [scanCode, setScanCode] = useState('');
+  const [scanError, setScanError] = useState('');
+
+  const addInventoryItem = (item: InventoryItem) => {
+    setItems((prev) => [
+      ...prev,
+      {
+        _key: newKey(),
+        inventoryItemId: item.id,
+        name: item.name,
+        description: item.description ?? '',
+        quantity: 1,
+        unitPrice: Number(item.unitPrice),
+      },
+    ]);
+  };
+
+  const handleScan = async (e: FormEvent) => {
+    e.preventDefault();
+    const code = scanCode.trim();
+    if (!code) return;
+    setScanError('');
+    try {
+      const item = (await api.get<InventoryItem>(`/inventory/barcode/${encodeURIComponent(code)}`)).data;
+      addInventoryItem(item);
+      setScanCode('');
+    } catch {
+      setScanError(`No inventory item with barcode "${code}".`);
+    }
   };
 
   const addCustom = (e: FormEvent) => {
@@ -826,22 +842,47 @@ export function JobOrderPage() {
             <section className="card">
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Materials / Package</h2>
 
-              {/* Preset quick-add buttons */}
+              {/* Preset quick-add buttons (from Inventory) + barcode scan */}
               {!readOnly && (
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
                     Quick Add
                   </div>
+
+                  {/* Barcode scan-to-add */}
+                  <form onSubmit={handleScan} style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem', maxWidth: 340 }}>
+                    <input
+                      value={scanCode}
+                      onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
+                      placeholder="Scan or type barcode, then Enter"
+                      style={{ flex: 1, fontSize: '0.82rem' }}
+                    />
+                    <button type="submit" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}>
+                      Add
+                    </button>
+                  </form>
+                  {scanError && <p className="error-text" style={{ marginTop: 0 }}>{scanError}</p>}
+
+                  {inventoryQuery.isLoading && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading items…</p>}
+                  {inventoryQuery.data?.length === 0 && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      No inventory items yet. Add them under Settings → Inventory Management.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {PRESETS.map((preset) => (
+                    {inventoryQuery.data?.map((item) => (
                       <button
-                        key={preset.name}
+                        key={item.id}
                         type="button"
                         className="btn btn-secondary"
                         style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
-                        onClick={() => addPreset(preset)}
+                        title={item.description ?? undefined}
+                        onClick={() => addInventoryItem(item)}
                       >
-                        + {preset.name}
+                        + {item.name}
+                        <span style={{ color: item.lowStockAlert > 0 && item.stockQty <= item.lowStockAlert ? 'var(--danger)' : 'var(--text-muted)', marginLeft: '0.35rem' }}>
+                          ({item.stockQty})
+                        </span>
                       </button>
                     ))}
                   </div>

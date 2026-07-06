@@ -14,6 +14,7 @@ import { CompanyProfileModule } from './company-profile.module';
 import { DesignJobsModule } from './design-jobs.module';
 import { DevProjectsModule } from './dev-projects.module';
 import { EarningsModule } from './earnings.module';
+import { InventoryModule } from './inventory.module';
 import { JobOrdersModule } from './job-orders.module';
 import { JobsModule } from './jobs.module';
 import { KpisModule } from './kpis.module';
@@ -43,6 +44,7 @@ import { WithdrawalsModule } from './withdrawals.module';
     LicensesModule,
     JobsModule,
     JobOrdersModule,
+    InventoryModule,
     EarningsModule,
     WithdrawalsModule,
     AuditLogsModule,

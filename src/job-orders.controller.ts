@@ -16,8 +16,8 @@ export class JobOrdersController {
   /** Create or update the job order (upsert by jobId or designJobId) */
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
   @Post()
-  upsert(@Body() dto: UpsertJobOrderDto) {
-    return this.jobOrdersService.upsert(dto);
+  upsert(@Body() dto: UpsertJobOrderDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.jobOrdersService.upsert(dto, user);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.DESIGNER, UserRole.MACHINE_OPERATOR)

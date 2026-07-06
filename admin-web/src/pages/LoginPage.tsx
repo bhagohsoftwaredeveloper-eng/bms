@@ -113,24 +113,10 @@ export function LoginPage() {
             animate={{ scale: 1, opacity: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 14, delay: 0.1 }}
           >
-            <svg width="30" height="30" viewBox="0 0 48 48" fill="none">
-              <defs>
-                <linearGradient id="lgRing" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stopColor="#22d3ee" />
-                  <stop offset="1" stopColor="#e879f9" />
-                </linearGradient>
-              </defs>
-              <circle cx="24" cy="24" r="13" fill="none" stroke="#fff" strokeWidth="5" />
-              <circle cx="24" cy="24" r="4.5" fill="#e879f9" />
-              <g transform="rotate(-24 24 24)">
-                <ellipse cx="24" cy="24" rx="21" ry="8.5" fill="none" stroke="url(#lgRing)" strokeWidth="2.6" />
-                <circle cx="3" cy="24" r="2.4" fill="#22d3ee" />
-                <circle cx="45" cy="24" r="2.4" fill="#e879f9" />
-              </g>
-            </svg>
+            <img src="/ockpi.png" alt="OCKPI" className="lg-logo-img" />
           </motion.div>
-          <h1 className="lg-title">Orbit Console</h1>
-          <p className="lg-sub">Everything orbits here</p>
+          {/* <h1 className="lg-title">Orbit Console</h1>
+          <p className="lg-sub">Everything orbits here</p> */}
         </motion.div>
 
         <motion.div className="lg-field" variants={item}>

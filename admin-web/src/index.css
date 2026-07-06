@@ -656,21 +656,27 @@ input[type="text"] {
 /* brand */
 .lg-brand { text-align: center; margin-bottom: 1.6rem; }
 .lg-logo {
-  width: 56px; height: 56px;
+  position: relative;
+  /* width: fit-content; */
+  padding: 16px 24px;
   margin: 0 auto 0.9rem;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 16px;
+  /* border-radius: 20px; */
   color: #fff;
-  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
-  box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.4);
+  /* background: #000000; */
+  /* box-shadow: 0 10px 28px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.10); */
+}
+.lg-logo-img {
+  height: 100px; width: auto; max-width: 220px;
+  object-fit: contain; display: block;
 }
 .lg-logo::after {
   content: '';
   position: absolute;
-  width: 56px; height: 56px;
+  inset: 0;
   border-radius: 16px;
   box-shadow: 0 0 0 0 var(--accent-glow);
-  animation: lg-pulse 2.8s ease-out infinite;
+  /* animation: lg-pulse 2.8s ease-out infinite; */
 }
 @keyframes lg-pulse {
   0% { box-shadow: 0 0 0 0 var(--accent-glow); }
@@ -901,6 +907,14 @@ body::before {
 }
 .card:hover {
   box-shadow: var(--shadow-lg), inset 0 1px 0 var(--glass-hl);
+}
+
+/* Dialogs stay solid & fully readable — no frosted glass bleed-through.
+   Placed after the glass .card rule so it wins on source order. */
+.dialog-content {
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* ============================================================

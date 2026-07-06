@@ -420,11 +420,61 @@ model JobOrderItem {
   quantity    Int     @default(1)
   unitPrice   Decimal @db.Decimal(12, 2) @map("unit_price")
 
+  inventoryItemId String? @map("inventory_item_id")
+
   createdAt DateTime @default(now()) @map("created_at")
 
-  jobOrder JobOrder @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+  jobOrder      JobOrder       @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
 
   @@map("job_order_items")
+}
+
+// ---------------------------------------------------------------------------
+// Inventory (materials / hardware catalog with stock)
+// ---------------------------------------------------------------------------
+
+model InventoryItem {
+  id            String  @id @default(uuid())
+  name          String
+  description   String? @db.Text
+  barcode       String? @unique
+  unitPrice     Decimal @default(0) @db.Decimal(12, 2) @map("unit_price")
+  stockQty      Int     @default(0) @map("stock_qty")
+  lowStockAlert Int     @default(0) @map("low_stock_alert")
+  sortOrder     Int     @default(0) @map("sort_order")
+  active        Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  jobOrderItems JobOrderItem[]
+  movements     StockMovement[]
+
+  @@map("inventory_items")
+}
+
+enum StockMovementReason {
+  MANUAL_ADJUST
+  JOB_ORDER_DEDUCTION
+  JOB_ORDER_RESTORE
+}
+
+model StockMovement {
+  id              String              @id @default(uuid())
+  inventoryItemId String              @map("inventory_item_id")
+  delta           Int // + adds stock, - removes stock
+  balance         Int // resulting stockQty after this movement
+  reason          StockMovementReason
+  jobOrderId      String?             @map("job_order_id")
+  note            String?             @db.Text
+  userId          String?             @map("user_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId])
+  @@map("stock_movements")
 }
 
 // ---------------------------------------------------------------------------
