@@ -105,8 +105,8 @@ export function RunningTimerWidget() {
     if (!dragRef.current) return;
     const rect = cardRef.current!.getBoundingClientRect();
     setPos({
-      x: Math.min(Math.max(0, e.clientX - dragRef.current.dx), window.innerWidth - rect.width),
-      y: Math.min(Math.max(0, e.clientY - dragRef.current.dy), window.innerHeight - rect.height),
+      x: Math.min(Math.max(0, e.clientX - dragRef.current.dx), Math.max(0, window.innerWidth - rect.width)),
+      y: Math.min(Math.max(0, e.clientY - dragRef.current.dy), Math.max(0, window.innerHeight - rect.height)),
     });
   };
   const onPointerUp = () => {
@@ -152,6 +152,7 @@ export function RunningTimerWidget() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 8, touchAction: 'none' }}
       >
         <span style={{ color: 'var(--text-secondary, #888)', letterSpacing: 2 }}>⠿</span>
