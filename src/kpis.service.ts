@@ -30,7 +30,6 @@ export const KPI_ROLES: UserRole[] = [
   UserRole.INSTALLER,
   UserRole.DEVELOPER,
   UserRole.DESIGNER,
-  UserRole.MACHINE_OPERATOR,
   UserRole.LIAISON,
   UserRole.SALES_STAFF,
   UserRole.ADMIN_STAFF,
@@ -58,11 +57,6 @@ const DEFAULT_KPI_DEFS: Partial<Record<UserRole, KpiDef[]>> = {
     { name: 'Monthly Activity',             weight: 25, target: 100, unit: '%',    auto: true  },
     { name: 'First Approval Rate',         weight: 20, target: 80,  unit: '%',    auto: false },
     { name: 'Design Quality Score',        weight: 20, target: 90,  unit: '/100', auto: false },
-  ],
-  [UserRole.MACHINE_OPERATOR]: [
-    { name: 'Production Output',      weight: 40, target: 20,  unit: 'count', auto: true  },
-    { name: 'On-Time Production',     weight: 40, target: 90,  unit: '%',     auto: true  },
-    { name: 'Quality Control',        weight: 20, target: 95,  unit: '%',     auto: false },
   ],
   [UserRole.LIAISON]: [
     { name: 'Project Completion Rate',   weight: 30, target: 95,  unit: '%',    auto: false },
@@ -164,47 +158,6 @@ export class KpisService implements OnModuleInit {
     } as Record<string, number>;
   }
 
-  // ── Auto KPIs: DESIGNER ────────────────────────────────────────────────────
-
-  private async designerAutoKpis(userId: string, start: Date, end: Date) {
-    const jobs = await this.prisma.designJob.findMany({
-      where: { designerId: userId, createdAt: { gte: start, lt: end } },
-      include: { updates: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'asc' }, take: 1 } },
-    });
-
-    const total = jobs.length;
-    const completed = jobs.filter(j => j.status === 'COMPLETED').length;
-    const onTime = jobs.filter(j => {
-      if (j.status !== 'COMPLETED' || !j.dueDate || j.updates.length === 0) return false;
-      return new Date(j.updates[0].createdAt) <= new Date(j.dueDate);
-    }).length;
-
-    return {
-      'On-Time Design Completion': completed > 0 ? (onTime / completed) * 100 : 0,
-      'Monthly Activity': Math.min(total / 10, 1) * 100,
-    } as Record<string, number>;
-  }
-
-  // ── Auto KPIs: MACHINE_OPERATOR ────────────────────────────────────────────
-
-  private async operatorAutoKpis(userId: string, start: Date, end: Date) {
-    const jobs = await this.prisma.designJob.findMany({
-      where: { operatorId: userId, updatedAt: { gte: start, lt: end }, status: 'COMPLETED' },
-      include: { updates: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'asc' }, take: 1 } },
-    });
-
-    const completed = jobs.length;
-    const onTime = jobs.filter(j => {
-      if (!j.dueDate || j.updates.length === 0) return false;
-      return new Date(j.updates[0].createdAt) <= new Date(j.dueDate);
-    }).length;
-
-    return {
-      'Production Output': completed,
-      'On-Time Production': completed > 0 ? (onTime / completed) * 100 : 0,
-    } as Record<string, number>;
-  }
-
   // ── Dashboard: single user ─────────────────────────────────────────────────
 
   async getDashboard(userId: string, role: UserRole, month: number, year: number, baseBonusInput?: number) {
@@ -216,8 +169,6 @@ export class KpisService implements OnModuleInit {
     let autoValues: Record<string, number> = {};
     if (role === UserRole.INSTALLER) autoValues = await this.installerAutoKpis(userId, start, end);
     else if (role === UserRole.DEVELOPER) autoValues = await this.developerAutoKpis(userId, start, end);
-    else if (role === UserRole.DESIGNER) autoValues = await this.designerAutoKpis(userId, start, end);
-    else if (role === UserRole.MACHINE_OPERATOR) autoValues = await this.operatorAutoKpis(userId, start, end);
 
     const manuals = await this.prisma.kpiResult.findMany({ where: { userId, month, year, isManual: true } });
     const manualMap = Object.fromEntries(manuals.map((m) => [m.kpiName, m]));
@@ -510,7 +461,7 @@ export class KpisService implements OnModuleInit {
     const growth = prevMonthRevenue === 0 ? (currentMonthRevenue > 0 ? 100 : 0) : ((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100;
 
     const byProduct = jobOrders.reduce((acc, o) => {
-      const name = o.product?.productName || 'Design / Other';
+      const name = o.product?.productName || 'Other';
       acc[name] = (acc[name] || 0) + Number(o.salePrice);
       return acc;
     }, {} as Record<string, number>);

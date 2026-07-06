@@ -130,7 +130,7 @@ export class KpisController {
 
   // ── Role-specific dashboard + my incentives ─────────────────────────────────
 
-  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.SUPER_ADMIN, UserRole.MACHINE_OPERATOR, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.SUPER_ADMIN, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
   @Get('dashboard')
   getDashboard(
     @CurrentUser() user: AuthUser,
@@ -158,7 +158,7 @@ export class KpisController {
     return this.kpisService.getDashboard(uid, role, m, y);
   }
 
-  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.MACHINE_OPERATOR, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
+  @Roles(UserRole.INSTALLER, UserRole.DEVELOPER, UserRole.DESIGNER, UserRole.LIAISON, UserRole.SALES_STAFF, UserRole.ADMIN_STAFF)
   @Get('incentives/mine')
   getMyIncentives(@CurrentUser() user: AuthUser) {
     return this.kpisService.getMyIncentives(user.id);
