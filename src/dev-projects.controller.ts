@@ -53,6 +53,12 @@ export class DevProjectsController {
   }
 
   @Roles(UserRole.DEVELOPER, UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Get('active')
+  findActive(@CurrentUser() user: AuthenticatedUser) {
+    return this.devProjectsService.findActive(user);
+  }
+
+  @Roles(UserRole.DEVELOPER, UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.devProjectsService.findOne(id, user);

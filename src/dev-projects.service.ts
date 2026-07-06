@@ -91,6 +91,14 @@ export class DevProjectsService {
     return project;
   }
 
+  /** The current user's running project, for the floating timer widget. */
+  findActive(user: { id: string }) {
+    return this.prisma.devProject.findFirst({
+      where: { developerId: user.id, status: DevProjectStatus.IN_PROGRESS },
+      select: { id: true, name: true, startedAt: true, totalMinutes: true },
+    });
+  }
+
   async update(id: string, dto: UpdateDevProjectDto) {
     const project = await this.findRaw(id);
     if (dto.developerId && dto.developerId !== project.developerId) {
@@ -123,15 +131,32 @@ export class DevProjectsService {
     }
 
     const now = new Date();
-    await this.prisma.$transaction([
-      this.prisma.devProjectSession.create({
+    await this.prisma.$transaction(async (tx) => {
+      // One active timer per developer: auto-stop any other running project
+      // first, saving its tracked time, then start the requested one.
+      const running = await tx.devProject.findFirst({
+        where: {
+          developerId: project.developerId,
+          status: DevProjectStatus.IN_PROGRESS,
+          id: { not: id },
+        },
+      });
+      if (running) {
+        const totalMinutes = await this.closeOpenSession(tx, running, now);
+        await tx.devProject.update({
+          where: { id: running.id },
+          data: { status: DevProjectStatus.PENDING, startedAt: null, totalMinutes },
+        });
+      }
+
+      await tx.devProjectSession.create({
         data: { projectId: id, startedAt: now },
-      }),
-      this.prisma.devProject.update({
+      });
+      await tx.devProject.update({
         where: { id },
         data: { status: DevProjectStatus.IN_PROGRESS, startedAt: now },
-      }),
-    ]);
+      });
+    });
 
     return this.findOne(id, user);
   }
