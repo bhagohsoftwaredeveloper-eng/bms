@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobOrderStatus, JobOrderType, Prisma, UserRole } from '@prisma/client';
+import { JobOrderStatus, Prisma } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
@@ -9,7 +9,6 @@ const INCLUDE_FULL = {
   client: true,
   product: true,
   job: { include: { installer: true } },
-  designJob: { include: { designer: true, operator: true } },
   items: { orderBy: { createdAt: 'asc' as const } },
 };
 
@@ -21,15 +20,11 @@ export class JobOrdersService {
   ) {}
 
   async upsert(dto: UpsertJobOrderDto, user: AuthenticatedUser) {
-    // Find existing by either jobId or designJobId
-    const where: Prisma.JobOrderWhereUniqueInput = dto.jobId
-      ? { jobId: dto.jobId }
-      : { designJobId: dto.designJobId! };
-
-    const existing = await this.prisma.jobOrder.findUnique({ where });
+    const existing = dto.jobId
+      ? await this.prisma.jobOrder.findUnique({ where: { jobId: dto.jobId } })
+      : null;
 
     const data = {
-      type: dto.type ?? (dto.jobId ? JobOrderType.SOFTWARE : JobOrderType.DESIGN),
       clientId: dto.clientId,
       productId: dto.productId ?? null,
       salePrice: dto.salePrice,
@@ -70,7 +65,6 @@ export class JobOrdersService {
         jobOrder = await tx.jobOrder.create({
           data: {
             jobId: dto.jobId,
-            designJobId: dto.designJobId,
             ...data,
             items: { createMany: { data: itemsCreate } },
           },
@@ -101,14 +95,6 @@ export class JobOrdersService {
     return jobOrder;
   }
 
-  async findByDesignJob(designJobId: string) {
-    const jobOrder = await this.prisma.jobOrder.findUnique({
-      where: { designJobId },
-      include: INCLUDE_FULL,
-    });
-    return jobOrder;
-  }
-
   async findOne(id: string) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { id },
@@ -118,17 +104,8 @@ export class JobOrdersService {
     return jobOrder;
   }
 
-  findAll(type: JobOrderType | undefined, user: AuthenticatedUser) {
-    const where: Prisma.JobOrderWhereInput = type ? { type } : {};
-
-    if (user.role === UserRole.DESIGNER) {
-      where.designJob = { designerId: user.id };
-    } else if (user.role === UserRole.MACHINE_OPERATOR) {
-      where.designJob = { operatorId: user.id };
-    }
-
+  findAll() {
     return this.prisma.jobOrder.findMany({
-      where,
       orderBy: { createdAt: 'desc' },
       include: INCLUDE_FULL,
     });

@@ -9,7 +9,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType, JobOrderStatus, JobOrderType } from '@prisma/client';
+import { DiscountType, JobOrderStatus } from '@prisma/client';
 
 export class JobOrderItemDto {
   @IsString()
@@ -34,17 +34,9 @@ export class JobOrderItemDto {
 }
 
 export class UpsertJobOrderDto {
-  @IsEnum(JobOrderType)
-  @IsOptional()
-  type?: JobOrderType;
-
   @IsOptional()
   @IsString()
   jobId?: string;
-
-  @IsOptional()
-  @IsString()
-  designJobId?: string;
 
   @IsString()
   clientId!: string;
