@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `dev_projects` ADD COLUMN `run_seconds` INTEGER NOT NULL DEFAULT 0;

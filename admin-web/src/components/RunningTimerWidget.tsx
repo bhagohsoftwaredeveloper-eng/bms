@@ -5,8 +5,11 @@ import { api } from '../lib/api';
 interface ActiveTimer {
   id: string;
   name: string;
-  startedAt: string;
+  /** null while the project is paused (session banked, timer not running). */
+  startedAt: string | null;
   totalMinutes: number;
+  /** Seconds banked by pauses within the current run (resets on start/stop). */
+  runSeconds: number;
 }
 
 interface Pos {
@@ -28,14 +31,22 @@ function loadPos(): Pos | null {
   }
 }
 
-function formatElapsed(startedAt: string): string {
-  const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+/** Clock for the current run: paused seconds banked so far + live session. */
+function formatElapsed(timer: { startedAt: string | null; runSeconds: number }): string {
+  const live = timer.startedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(timer.startedAt).getTime()) / 1000))
+    : 0;
+  const sec = timer.runSeconds + live;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(Math.floor(sec / 3600))}:${pad(Math.floor((sec % 3600) / 60))}:${pad(sec % 60)}`;
 }
 
-function formatTotal(totalMinutes: number): string {
-  const m = Math.max(0, Math.round(totalMinutes));
+/** Overall tracked time: past runs (totalMinutes) + the current run, live. */
+function formatTotal(timer: { startedAt: string | null; totalMinutes: number; runSeconds: number }): string {
+  const live = timer.startedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(timer.startedAt).getTime()) / 1000))
+    : 0;
+  const m = Math.max(0, Math.floor(timer.totalMinutes + (timer.runSeconds + live) / 60));
   return `${Math.floor(m / 60)}h ${m % 60}m total tracked`;
 }
 
@@ -64,10 +75,10 @@ export function RunningTimerWidget() {
 
   // Tick every second while running so the elapsed readout stays live.
   useEffect(() => {
-    if (!active) return;
+    if (!active?.startedAt) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [active]);
+  }, [active?.startedAt]);
 
   // Keep the card inside the viewport when the window resizes.
   useEffect(() => {
@@ -75,7 +86,7 @@ export function RunningTimerWidget() {
       setPos((p) => {
         if (!p) return p;
         const rect = cardRef.current?.getBoundingClientRect();
-        const w = rect?.width ?? 260;
+        const w = rect?.width ?? 320;
         const h = rect?.height ?? 120;
         return {
           x: Math.min(Math.max(0, p.x), Math.max(0, window.innerWidth - w)),
@@ -86,15 +97,27 @@ export function RunningTimerWidget() {
     return () => window.removeEventListener('resize', clamp);
   }, []);
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['dev-active'] });
+    qc.invalidateQueries({ queryKey: ['dev-projects'] });
+  };
   const stopTimer = useMutation({
     mutationFn: (id: string) => api.post(`/dev-projects/${id}/stop`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['dev-active'] });
-      qc.invalidateQueries({ queryKey: ['dev-projects'] });
-    },
+    onSuccess: invalidate,
+  });
+  const pauseTimer = useMutation({
+    mutationFn: (id: string) => api.post(`/dev-projects/${id}/pause`),
+    onSuccess: invalidate,
+  });
+  const resumeTimer = useMutation({
+    mutationFn: (id: string) => api.post(`/dev-projects/${id}/resume`),
+    onSuccess: invalidate,
   });
 
-  if (!active?.id || !active.startedAt) return null;
+  if (!active?.id) return null;
+  const paused = !active.startedAt;
+  const dotColor = paused ? 'var(--warning, #f59e0b)' : 'var(--success, #22c55e)';
+  const mutationError = stopTimer.isError || pauseTimer.isError || resumeTimer.isError;
 
   const onPointerDown = (e: React.PointerEvent) => {
     const rect = cardRef.current!.getBoundingClientRect();
@@ -136,18 +159,20 @@ export function RunningTimerWidget() {
     return (
       <div
         ref={cardRef}
-        style={{ ...baseStyle, padding: '0.4rem 0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+        style={{ ...baseStyle, padding: '0.5rem 0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
         onClick={toggleMinimized}
         title={`${active.name} — click to expand`}
       >
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success, #22c55e)', display: 'inline-block' }} />
-        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{formatElapsed(active.startedAt)}</span>
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
+        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: '1rem', color: paused ? 'var(--warning, #f59e0b)' : 'inherit' }}>
+          {formatElapsed(active)}
+        </span>
       </div>
     );
   }
 
   return (
-    <div ref={cardRef} style={{ ...baseStyle, width: 260, padding: '0.75rem 1rem' }}>
+    <div ref={cardRef} style={{ ...baseStyle, width: 320, padding: '1rem 1.25rem' }}>
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -156,35 +181,67 @@ export function RunningTimerWidget() {
         style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 8, touchAction: 'none' }}
       >
         <span style={{ color: 'var(--text-secondary, #888)', letterSpacing: 2 }}>⠿</span>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success, #22c55e)', display: 'inline-block' }} />
-        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{active.name}</strong>
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
+        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontSize: '0.95rem' }}>{active.name}</strong>
         <button
           type="button"
           onClick={toggleMinimized}
           title="Minimize"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1rem', lineHeight: 1 }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1.1rem', lineHeight: 1 }}
         >
           –
         </button>
       </div>
-      <div style={{ fontSize: '1.5rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', margin: '0.35rem 0 0.1rem' }}>
-        {formatElapsed(active.startedAt)}
-      </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #888)', marginBottom: '0.6rem' }}>
-        {formatTotal(active.totalMinutes)}
-      </div>
-      <button
-        type="button"
-        className="btn btn-danger"
-        style={{ width: '100%' }}
-        disabled={stopTimer.isPending}
-        onClick={() => stopTimer.mutate(active.id)}
+      <div
+        style={{
+          fontSize: '2rem',
+          fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
+          margin: '0.4rem 0 0.1rem',
+          color: paused ? 'var(--warning, #f59e0b)' : 'inherit',
+        }}
       >
-        {stopTimer.isPending ? 'Stopping…' : 'Stop'}
-      </button>
-      {stopTimer.isError && (
+        {formatElapsed(active)}
+      </div>
+      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginBottom: '0.75rem' }}>
+        {paused && <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>⏸ Paused · </span>}
+        {formatTotal(active)}
+      </div>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        {paused ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ flex: 1 }}
+            disabled={resumeTimer.isPending}
+            onClick={() => resumeTimer.mutate(active.id)}
+          >
+            {resumeTimer.isPending ? 'Resuming…' : 'Resume'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ flex: 1 }}
+            disabled={pauseTimer.isPending}
+            onClick={() => pauseTimer.mutate(active.id)}
+          >
+            {pauseTimer.isPending ? 'Pausing…' : 'Pause'}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-danger"
+          style={{ flex: 1 }}
+          disabled={stopTimer.isPending}
+          onClick={() => stopTimer.mutate(active.id)}
+        >
+          {stopTimer.isPending ? 'Stopping…' : 'Stop'}
+        </button>
+      </div>
+      {mutationError && (
         <div className="error-text" style={{ fontSize: '0.75rem', marginTop: '0.4rem' }}>
-          Failed to stop — try again.
+          Action failed — try again.
         </div>
       )}
     </div>

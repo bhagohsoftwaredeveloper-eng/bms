@@ -28,13 +28,13 @@ export class EarningsController {
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Patch(':id/approve')
-  approve(@Param('id') id: string) {
-    return this.earningsService.setStatus(id, EarningStatus.APPROVED);
+  approve(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.earningsService.setStatus(id, EarningStatus.APPROVED, user.id);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Patch(':id/paid')
-  markPaid(@Param('id') id: string) {
-    return this.earningsService.setStatus(id, EarningStatus.PAID);
+  markPaid(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.earningsService.setStatus(id, EarningStatus.PAID, user.id);
   }
 }

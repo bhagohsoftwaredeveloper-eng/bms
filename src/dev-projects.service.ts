@@ -95,7 +95,13 @@ export class DevProjectsService {
   findActive(user: { id: string }) {
     return this.prisma.devProject.findFirst({
       where: { developerId: user.id, status: DevProjectStatus.IN_PROGRESS },
-      select: { id: true, name: true, startedAt: true, totalMinutes: true },
+      select: {
+        id: true,
+        name: true,
+        startedAt: true,
+        totalMinutes: true,
+        runSeconds: true,
+      },
     });
   }
 
@@ -142,10 +148,15 @@ export class DevProjectsService {
         },
       });
       if (running) {
-        const totalMinutes = await this.closeOpenSession(tx, running, now);
+        const seconds = await this.closeOpenSession(tx, running, now);
         await tx.devProject.update({
           where: { id: running.id },
-          data: { status: DevProjectStatus.PENDING, startedAt: null, totalMinutes },
+          data: {
+            status: DevProjectStatus.PENDING,
+            startedAt: null,
+            totalMinutes: this.endRunMinutes(running, seconds),
+            runSeconds: 0,
+          },
         });
       }
 
@@ -154,14 +165,18 @@ export class DevProjectsService {
       });
       await tx.devProject.update({
         where: { id },
-        data: { status: DevProjectStatus.IN_PROGRESS, startedAt: now },
+        data: { status: DevProjectStatus.IN_PROGRESS, startedAt: now, runSeconds: 0 },
       });
     });
 
     return this.findOne(id, user);
   }
 
-  async stop(id: string, user: { id: string; role: UserRole }) {
+  /**
+   * Pause the running timer: bank the open session's minutes but keep the
+   * project IN_PROGRESS (startedAt null = paused) so the widget stays up.
+   */
+  async pause(id: string, user: { id: string; role: UserRole }) {
     const project = await this.findRaw(id);
     this.assertOwner(project, user);
 
@@ -171,14 +186,61 @@ export class DevProjectsService {
 
     await this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      const totalMinutes = await this.closeOpenSession(tx, project, now);
+      // Pause banks exact seconds into runSeconds only; totalMinutes grows
+      // once, when the run ends, so paused time is never double-counted.
+      const seconds = await this.closeOpenSession(tx, project, now);
+      await tx.devProject.update({
+        where: { id },
+        data: { startedAt: null, runSeconds: { increment: seconds } },
+      });
+    });
+
+    return this.findOne(id, user);
+  }
+
+  async resume(id: string, user: { id: string; role: UserRole }) {
+    const project = await this.findRaw(id);
+    this.assertOwner(project, user);
+
+    if (project.status !== DevProjectStatus.IN_PROGRESS || project.startedAt) {
+      throw new ForbiddenException('This project is not currently paused');
+    }
+
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.devProjectSession.create({
+        data: { projectId: id, startedAt: now },
+      }),
+      this.prisma.devProject.update({
+        where: { id },
+        data: { startedAt: now },
+      }),
+    ]);
+
+    return this.findOne(id, user);
+  }
+
+  async stop(id: string, user: { id: string; role: UserRole }) {
+    const project = await this.findRaw(id);
+    this.assertOwner(project, user);
+
+    // A paused project (IN_PROGRESS, startedAt null) can also be stopped;
+    // closeOpenSession is a no-op in that case since its minutes are banked.
+    if (project.status !== DevProjectStatus.IN_PROGRESS) {
+      throw new ForbiddenException('This project is not currently running');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const seconds = await this.closeOpenSession(tx, project, now);
 
       await tx.devProject.update({
         where: { id },
         data: {
           status: DevProjectStatus.PENDING,
           startedAt: null,
-          totalMinutes,
+          totalMinutes: this.endRunMinutes(project, seconds),
+          runSeconds: 0,
         },
       });
     });
@@ -202,10 +264,12 @@ export class DevProjectsService {
 
       if (dto.progressPercent >= 100) {
         data.status = DevProjectStatus.COMPLETED;
-        if (project.startedAt) {
-          data.totalMinutes = await this.closeOpenSession(tx, project, now);
-          data.startedAt = null;
-        }
+        // Completing ends the run: bank the open segment (if running) plus
+        // any paused seconds into totalMinutes.
+        const seconds = await this.closeOpenSession(tx, project, now);
+        data.totalMinutes = this.endRunMinutes(project, seconds);
+        data.runSeconds = 0;
+        data.startedAt = null;
       } else if (project.status === DevProjectStatus.COMPLETED) {
         data.status = DevProjectStatus.PENDING;
       }
@@ -313,16 +377,21 @@ export class DevProjectsService {
     });
   }
 
+  /**
+   * Close the open session row (if any) and return the exact seconds it
+   * lasted. Callers decide how to bank that time: pauses accumulate it in
+   * runSeconds; run-ending transitions fold runSeconds into totalMinutes.
+   */
   private async closeOpenSession(
     tx: Prisma.TransactionClient,
-    project: { id: string; startedAt: Date | null; totalMinutes: number },
+    project: { id: string; startedAt: Date | null },
     now: Date,
   ): Promise<number> {
-    if (!project.startedAt) return project.totalMinutes;
+    if (!project.startedAt) return 0;
 
-    const minutes = Math.max(
+    const seconds = Math.max(
       0,
-      Math.round((now.getTime() - project.startedAt.getTime()) / 60000),
+      Math.round((now.getTime() - project.startedAt.getTime()) / 1000),
     );
     const openSession = await tx.devProjectSession.findFirst({
       where: { projectId: project.id, endedAt: null },
@@ -331,11 +400,22 @@ export class DevProjectsService {
     if (openSession) {
       await tx.devProjectSession.update({
         where: { id: openSession.id },
-        data: { endedAt: now, minutes },
+        data: { endedAt: now, minutes: Math.round(seconds / 60) },
       });
     }
 
-    return project.totalMinutes + minutes;
+    return seconds;
+  }
+
+  /** Total minutes after ending the current run (banked pauses + last segment). */
+  private endRunMinutes(
+    project: { totalMinutes: number; runSeconds: number },
+    lastSegmentSeconds: number,
+  ): number {
+    return (
+      project.totalMinutes +
+      Math.round((project.runSeconds + lastSegmentSeconds) / 60)
+    );
   }
 
   private async assertDeveloper(developerId: string) {

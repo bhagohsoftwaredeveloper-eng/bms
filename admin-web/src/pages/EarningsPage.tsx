@@ -14,7 +14,10 @@ const EMPTY_FORM = { userId: '', amount: '', type: EARNING_TYPES[0] };
 
 export function EarningsPage() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'SUPER_ADMIN';
+  // Mirrors the backend: SUPER_ADMIN and ADMIN_STAFF see all earnings and can
+  // approve/mark paid, but only SUPER_ADMIN can allocate new incentives.
+  const canManage = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN_STAFF';
+  const canAllocate = user?.role === 'SUPER_ADMIN';
   const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -27,7 +30,7 @@ export function EarningsPage() {
   const balanceQuery = useQuery({
     queryKey: ['withdrawals', 'balance'],
     queryFn: async () => (await api.get<{ availableBalance: number }>('/withdrawals/balance')).data,
-    enabled: !isAdmin,
+    enabled: !canManage,
   });
 
   const usersQuery = useQuery({
@@ -88,21 +91,23 @@ export function EarningsPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ marginBottom: '0.25rem' }}>{isAdmin ? 'Earnings' : 'My Earnings'}</h1>
+          <h1 style={{ marginBottom: '0.25rem' }}>{canManage ? 'Earnings' : 'My Earnings'}</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-            {isAdmin
+            {canAllocate
               ? 'Allocate installation, activation, bonus, and commission incentives to installers and developers.'
-              : 'Track incentives allocated to you for installations, activations, bonuses, and commissions.'}
+              : canManage
+                ? 'Review and approve installation, activation, bonus, and commission incentives for the team.'
+                : 'Track incentives allocated to you for installations, activations, bonuses, and commissions.'}
           </p>
         </div>
-        {isAdmin && (
+        {canAllocate && (
           <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
             Allocate incentive
           </button>
         )}
       </div>
 
-      {!isAdmin && earningsQuery.data && (
+      {!canManage && earningsQuery.data && (
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           <div className="card" style={{ flex: '1 1 160px', padding: '0.9rem 1.1rem' }}>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -190,7 +195,7 @@ export function EarningsPage() {
         </form>
       </Dialog>
 
-      <EarningsTable earningsWithBalance={earningsWithBalance} isAdmin={isAdmin} isLoading={earningsQuery.isLoading} isError={earningsQuery.isError} hasData={!!earningsQuery.data} onSetStatus={(id, action) => setStatus.mutate({ id, action })} />
+      <EarningsTable earningsWithBalance={earningsWithBalance} isAdmin={canManage} isLoading={earningsQuery.isLoading} isError={earningsQuery.isError} hasData={!!earningsQuery.data} onSetStatus={(id, action) => setStatus.mutate({ id, action })} />
     </div>
   );
 }

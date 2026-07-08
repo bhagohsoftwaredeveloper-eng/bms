@@ -1,8 +1,25 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { EarningStatus, WithdrawalStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { EarningStatus, Withdrawal, WithdrawalStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { NotificationsService } from './notifications.service';
 import { CreateWithdrawalDto } from './create-withdrawal.dto';
+
+/**
+ * Which current statuses may move to a given target status. REJECTED is also
+ * reachable from APPROVED so a mistaken approval can be undone before release;
+ * RELEASED is final.
+ */
+const ALLOWED_FROM: Record<WithdrawalStatus, WithdrawalStatus[]> = {
+  [WithdrawalStatus.PENDING]: [],
+  [WithdrawalStatus.APPROVED]: [WithdrawalStatus.PENDING],
+  [WithdrawalStatus.REJECTED]: [WithdrawalStatus.PENDING, WithdrawalStatus.APPROVED],
+  [WithdrawalStatus.RELEASED]: [WithdrawalStatus.APPROVED],
+};
 
 @Injectable()
 export class WithdrawalsService {
@@ -62,11 +79,12 @@ export class WithdrawalsService {
     });
   }
 
-  async setStatus(id: string, status: WithdrawalStatus) {
+  async setStatus(id: string, status: WithdrawalStatus, actorId: string) {
     const withdrawal = await this.prisma.withdrawal.findUnique({ where: { id } });
     if (!withdrawal) {
       throw new NotFoundException(`Withdrawal ${id} not found`);
     }
+    this.assertCanProcess(withdrawal, status, actorId);
 
     const updated = await this.prisma.withdrawal.update({
       where: { id },
@@ -76,11 +94,12 @@ export class WithdrawalsService {
     return updated;
   }
 
-  async release(id: string, proofUrl?: string) {
+  async release(id: string, actorId: string, proofUrl?: string) {
     const withdrawal = await this.prisma.withdrawal.findUnique({ where: { id } });
     if (!withdrawal) {
       throw new NotFoundException(`Withdrawal ${id} not found`);
     }
+    this.assertCanProcess(withdrawal, WithdrawalStatus.RELEASED, actorId);
 
     const updated = await this.prisma.withdrawal.update({
       where: { id },
@@ -89,6 +108,17 @@ export class WithdrawalsService {
     });
     await this.notifyStatus(updated.userId, id, WithdrawalStatus.RELEASED, Number(updated.amount));
     return updated;
+  }
+
+  private assertCanProcess(withdrawal: Withdrawal, target: WithdrawalStatus, actorId: string) {
+    if (withdrawal.userId === actorId) {
+      throw new ForbiddenException('You cannot process your own withdrawal request.');
+    }
+    if (!ALLOWED_FROM[target].includes(withdrawal.status)) {
+      throw new BadRequestException(
+        `Cannot mark a ${withdrawal.status.toLowerCase()} withdrawal as ${target.toLowerCase()}.`,
+      );
+    }
   }
 
   private notifyStatus(

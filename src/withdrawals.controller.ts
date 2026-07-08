@@ -36,19 +36,23 @@ export class WithdrawalsController {
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Patch(':id/approve')
-  approve(@Param('id') id: string) {
-    return this.withdrawalsService.setStatus(id, WithdrawalStatus.APPROVED);
+  approve(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.withdrawalsService.setStatus(id, WithdrawalStatus.APPROVED, user.id);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Patch(':id/reject')
-  reject(@Param('id') id: string) {
-    return this.withdrawalsService.setStatus(id, WithdrawalStatus.REJECTED);
+  reject(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.withdrawalsService.setStatus(id, WithdrawalStatus.REJECTED, user.id);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Patch(':id/release')
-  release(@Param('id') id: string, @Body() dto: ReleaseWithdrawalDto) {
-    return this.withdrawalsService.release(id, dto.proofUrl);
+  release(
+    @Param('id') id: string,
+    @Body() dto: ReleaseWithdrawalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.withdrawalsService.release(id, user.id, dto.proofUrl);
   }
 }

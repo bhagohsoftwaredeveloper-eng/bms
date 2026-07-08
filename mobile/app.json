@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Beulah Field",
-    "slug": "beulah-mobile",
+    "slug": "orbit-console",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "beulah",
@@ -21,9 +21,10 @@
         "backgroundColor": "#4f46e5"
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "CAMERA"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
@@ -31,15 +32,24 @@
       "expo-secure-store",
       [
         "expo-location",
-        { "locationAlwaysAndWhenInUsePermission": "Allow Beulah Field to capture the installation location for proof of service." }
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Beulah Field to capture the installation location for proof of service."
+        }
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "Allow Beulah Field to attach installation photos as proof of service." }
+        {
+          "photosPermission": "Allow Beulah Field to attach installation photos as proof of service."
+        }
       ]
     ],
     "extra": {
-      "apiUrl": "http://192.168.1.246:3001/api"
-    }
+      "apiUrl": "https://0rex-server.tail7dcc9b.ts.net/api",
+      "router": {},
+      "eas": {
+        "projectId": "15bee5ca-b863-412c-8d96-51688866934e"
+      }
+    },
+    "owner": "rexposdevs-organization"
   }
 }

@@ -60,11 +60,14 @@ function formatMinutes(totalMinutes: number) {
 }
 
 function formatLiveDuration(project: DevProject) {
-  if (project.status !== 'IN_PROGRESS' || !project.startedAt) {
+  if (project.status !== 'IN_PROGRESS') {
     return formatMinutes(project.totalMinutes);
   }
-  const elapsedSec = Math.max(0, Math.floor((Date.now() - new Date(project.startedAt).getTime()) / 1000));
-  const totalSec = project.totalMinutes * 60 + elapsedSec;
+  // Current run = paused seconds banked so far + live segment (if not paused).
+  const elapsedSec = project.startedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(project.startedAt).getTime()) / 1000))
+    : 0;
+  const totalSec = project.totalMinutes * 60 + (project.runSeconds ?? 0) + elapsedSec;
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;

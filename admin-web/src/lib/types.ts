@@ -316,6 +316,8 @@ export interface DevProject {
   status: DevProjectStatus;
   progressPercent: number;
   totalMinutes: number;
+  /** Seconds banked by pauses within the current run (resets on start/stop). */
+  runSeconds: number;
   targetHours: number | null;
   projectStart: string | null;
   projectDeadline: string | null;

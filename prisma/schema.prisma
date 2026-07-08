@@ -577,6 +577,8 @@ model DevProject {
   status          DevProjectStatus @default(NOT_STARTED)
   progressPercent Int              @default(0) @map("progress_percent")
   totalMinutes    Int              @default(0) @map("total_minutes")
+  // Seconds banked by pauses within the current run; reset on start/stop.
+  runSeconds      Int              @default(0) @map("run_seconds")
   targetHours     Float?           @map("target_hours")
   projectStart    DateTime?        @map("project_start")
   projectDeadline DateTime?        @map("project_deadline")

@@ -13,7 +13,10 @@ const EMPTY_FORM = { amount: '', method: WITHDRAWAL_METHODS[0], accountName: '',
 
 export function WithdrawalsPage() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'SUPER_ADMIN';
+  // Mirrors the backend: SUPER_ADMIN and ADMIN_STAFF see all requests and can
+  // approve/reject/release; every role except SUPER_ADMIN can request payouts.
+  const canProcess = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN_STAFF';
+  const canRequest = user?.role !== 'SUPER_ADMIN';
   const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -36,7 +39,7 @@ export function WithdrawalsPage() {
   const balanceQuery = useQuery({
     queryKey: ['withdrawals', 'balance'],
     queryFn: async () => (await api.get<{ availableBalance: number }>('/withdrawals/balance')).data,
-    enabled: !isAdmin,
+    enabled: canRequest,
   });
 
   const availableBalance = balanceQuery.data?.availableBalance ?? 0;
@@ -140,21 +143,21 @@ export function WithdrawalsPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ marginBottom: '0.25rem' }}>{isAdmin ? 'Withdrawal Requests' : 'My Withdrawals'}</h1>
+          <h1 style={{ marginBottom: '0.25rem' }}>{canProcess ? 'Withdrawal Requests' : 'My Withdrawals'}</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-            {isAdmin
+            {canProcess
               ? 'Review and release payouts requested by installers and developers via GCash, Maya, or bank transfer.'
               : 'Request a payout of your approved earnings via GCash, Maya, or bank transfer, and track its status.'}
           </p>
         </div>
-        {!isAdmin && (
+        {canRequest && (
           <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
             Request withdrawal
           </button>
         )}
       </div>
 
-      {!isAdmin && (
+      {canRequest && (
         <div
           className="card"
           style={{
@@ -471,7 +474,7 @@ export function WithdrawalsPage() {
 
       <WithdrawalsTable
         data={withdrawalsQuery.data ?? []}
-        isAdmin={isAdmin}
+        isAdmin={canProcess}
         isLoading={withdrawalsQuery.isLoading}
         isError={withdrawalsQuery.isError}
         onSetStatus={(id, action) => setStatus.mutate({ id, action })}

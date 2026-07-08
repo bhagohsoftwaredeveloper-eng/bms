@@ -77,6 +77,18 @@ export class DevProjectsController {
   }
 
   @Roles(UserRole.DEVELOPER, UserRole.SUPER_ADMIN)
+  @Post(':id/pause')
+  pause(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.devProjectsService.pause(id, user);
+  }
+
+  @Roles(UserRole.DEVELOPER, UserRole.SUPER_ADMIN)
+  @Post(':id/resume')
+  resume(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.devProjectsService.resume(id, user);
+  }
+
+  @Roles(UserRole.DEVELOPER, UserRole.SUPER_ADMIN)
   @Post(':id/stop')
   stop(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.devProjectsService.stop(id, user);

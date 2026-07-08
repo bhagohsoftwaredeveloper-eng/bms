@@ -99,94 +99,100 @@ function CompanyProfileTab() {
   if (!form) return null;
 
   return (
-    <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 560 }}>
+    <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 1000 }}>
       <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
         This information appears on printed Job Orders and other official documents.
       </p>
 
-      <div className="field">
-        <label htmlFor="cp-name">Business name</label>
-        <input id="cp-name" required value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} />
-      </div>
-
-      <div className="field">
-        <label htmlFor="cp-address">Address</label>
-        <textarea id="cp-address" rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-      </div>
-
-      <div className="field">
-        <label htmlFor="cp-phone">Phone</label>
-        <input id="cp-phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      </div>
-
-      <div className="field">
-        <label htmlFor="cp-email">Email</label>
-        <input id="cp-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      </div>
-
-      <div className="field">
-        <label htmlFor="cp-website">Website</label>
-        <input id="cp-website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://" />
-      </div>
-
-      <div className="field">
-        <label htmlFor="cp-tin">TIN / Tax ID</label>
-        <input id="cp-tin" value={form.tin} onChange={(e) => setForm({ ...form, tin: e.target.value })} />
-      </div>
-
-      <div className="field">
-        <label>Company Logo</label>
-        {form.logoUrl ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
-            <img
-              src={form.logoUrl}
-              alt="Company logo"
-              style={{ maxHeight: 56, maxWidth: 160, objectFit: 'contain', borderRadius: 4 }}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}
-                disabled={isUploading}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(260px, 1fr))', columnGap: '1.5rem' }}>
+        <div>
+          <div className="field">
+            <label>Company Logo</label>
+            {form.logoUrl ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
+                <img
+                  src={form.logoUrl}
+                  alt="Company logo"
+                  style={{ maxHeight: 56, maxWidth: 160, objectFit: 'contain', borderRadius: 4 }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isUploading ? 'Uploading…' : 'Change logo'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    onClick={() => setForm({ ...form, logoUrl: '' })}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: '0.5rem', padding: '1.5rem', border: '2px dashed var(--border)', borderRadius: 8,
+                  background: 'var(--bg)', cursor: 'pointer',
+                }}
                 onClick={() => fileInputRef.current?.click()}
               >
-                {isUploading ? 'Uploading…' : 'Change logo'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                onClick={() => setForm({ ...form, logoUrl: '' })}
-              >
-                Remove
-              </button>
-            </div>
+                <span style={{ fontSize: '2rem', lineHeight: 1 }}>🖼️</span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
+                  {isUploading ? 'Uploading…' : 'Click to upload logo'}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>JPEG, PNG, WEBP or GIF · max 10 MB</span>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              style={{ display: 'none' }}
+              onChange={handleLogoUpload}
+            />
+            {uploadError && <p className="error-text" style={{ marginTop: '0.4rem' }}>{uploadError}</p>}
           </div>
-        ) : (
-          <div
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: '0.5rem', padding: '1.5rem', border: '2px dashed var(--border)', borderRadius: 8,
-              background: 'var(--bg)', cursor: 'pointer',
-            }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <span style={{ fontSize: '2rem', lineHeight: 1 }}>🖼️</span>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-              {isUploading ? 'Uploading…' : 'Click to upload logo'}
-            </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>JPEG, PNG, WEBP or GIF · max 10 MB</span>
+
+          <div className="field">
+            <label htmlFor="cp-name">Business name</label>
+            <input id="cp-name" required value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} />
           </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          style={{ display: 'none' }}
-          onChange={handleLogoUpload}
-        />
-        {uploadError && <p className="error-text" style={{ marginTop: '0.4rem' }}>{uploadError}</p>}
+
+          <div className="field">
+            <label htmlFor="cp-address">Address</label>
+            <textarea id="cp-address" rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          </div>
+        </div>
+
+        <div>
+          <div className="field">
+            <label htmlFor="cp-phone">Phone</label>
+            <input id="cp-phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-email">Email</label>
+            <input id="cp-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-tin">TIN / Tax ID</label>
+            <input id="cp-tin" value={form.tin} onChange={(e) => setForm({ ...form, tin: e.target.value })} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-website">Website</label>
+            <input id="cp-website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://" />
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
