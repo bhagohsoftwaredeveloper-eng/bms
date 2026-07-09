@@ -667,3 +667,18 @@ model DevProjectReportFeedback {
 
   @@map("dev_project_report_feedback")
 }
+
+// Company details captured on the landing page before a download/install.
+model DownloadLead {
+  id            String  @id @default(uuid())
+  companyName   String  @map("company_name")
+  contactPerson String  @map("contact_person")
+  contactNo     String  @map("contact_no")
+  email         String?
+  emailVerified Boolean @default(false) @map("email_verified")
+  platform      String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("download_leads")
+}

@@ -1,6 +1,8 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { RequireAuth } from './components/RequireAuth';
+import { useAuthStore } from './lib/auth-store';
 import { AdminLayout } from './layouts/AdminLayout';
+import { LandingPage } from './pages/LandingPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClientsPage } from './pages/ClientsPage';
@@ -18,17 +20,26 @@ import { SettingsPage } from './pages/SettingsPage';
 import { UsersPage } from './pages/UsersPage';
 import { WithdrawalsPage } from './pages/WithdrawalsPage';
 
+/**
+ * Guests hitting the root URL see the public landing page; everywhere else
+ * (and everyone signed in) goes through the normal auth-gated app shell.
+ */
+function ProtectedShell() {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const location = useLocation();
+  if (!accessToken && location.pathname === '/') return <LandingPage />;
+  return (
+    <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'ADMIN_STAFF', 'SALES_STAFF']}>
+      <AdminLayout />
+    </RequireAuth>
+  );
+}
+
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route
-        element={
-          <RequireAuth roles={['SUPER_ADMIN', 'INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'ADMIN_STAFF', 'SALES_STAFF']}>
-            <AdminLayout />
-          </RequireAuth>
-        }
-      >
+      <Route element={<ProtectedShell />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/earnings" element={<EarningsPage />} />
         <Route path="/withdrawals" element={<WithdrawalsPage />} />

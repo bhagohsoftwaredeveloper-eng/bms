@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
@@ -21,6 +21,7 @@ import { LicensesModule } from './licenses.module';
 import { NotificationsModule } from './notifications.module';
 import { PrismaModule } from './prisma.module';
 import { SoftwareProductsModule } from './software-products.module';
+import { DownloadLeadsModule } from './download-leads.module';
 import { UploadsModule } from './uploads.module';
 import { UsersModule } from './users.module';
 import { WithdrawalsModule } from './withdrawals.module';
@@ -28,9 +29,21 @@ import { WithdrawalsModule } from './withdrawals.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Installer downloads (e.g. the mobile APK) live outside git in <cwd>/downloads.
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'downloads'),
+      serveRoot: '/downloads',
+      serveStaticOptions: {
+        index: false,
+        fallthrough: false,
+        setHeaders: (res, path) => {
+          res.setHeader('Content-Disposition', `attachment; filename="${basename(path)}"`);
+        },
+      },
+    }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'admin-web', 'dist'),
-      exclude: ['/api/{*path}'],
+      exclude: ['/api/{*path}', '/downloads/{*path}'],
     }),
     PrismaModule,
     AuthModule,
@@ -50,6 +63,7 @@ import { WithdrawalsModule } from './withdrawals.module';
     CompanyProfileModule,
     BackupsModule,
     UploadsModule,
+    DownloadLeadsModule,
     DevProjectsModule,
     NenposClientsModule,
   ],
