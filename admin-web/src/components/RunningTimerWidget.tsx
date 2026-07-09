@@ -1,6 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+
+// Document Picture-in-Picture is Chromium-only and missing from TS lib.
+interface DocumentPictureInPictureApi {
+  requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+}
+declare global {
+  interface Window {
+    documentPictureInPicture?: DocumentPictureInPictureApi;
+  }
+}
+
+/** Clone the app's stylesheets + theme class into the PiP window document. */
+function copyStylesTo(pip: Window) {
+  pip.document.documentElement.className = document.documentElement.className;
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      const css = Array.from(sheet.cssRules)
+        .map((rule) => rule.cssText)
+        .join('\n');
+      const style = pip.document.createElement('style');
+      style.textContent = css;
+      pip.document.head.appendChild(style);
+    } catch {
+      // Cross-origin sheet: re-link instead of inlining.
+      if (sheet.href) {
+        const link = pip.document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = sheet.href;
+        pip.document.head.appendChild(link);
+      }
+    }
+  }
+  pip.document.body.style.margin = '0';
+  pip.document.body.style.background = 'var(--surface)';
+  pip.document.body.style.color = 'var(--text)';
+}
 
 interface ActiveTimer {
   id: string;
@@ -19,6 +56,9 @@ interface Pos {
 
 const POS_KEY = 'dev-timer-pos';
 const MIN_KEY = 'dev-timer-min';
+const SCALE_KEY = 'dev-timer-scale';
+const MIN_SCALE = 0.6;
+const MAX_SCALE = 2;
 
 function loadPos(): Pos | null {
   try {
@@ -29,6 +69,11 @@ function loadPos(): Pos | null {
   } catch {
     return null;
   }
+}
+
+function loadScale(): number {
+  const s = Number(localStorage.getItem(SCALE_KEY));
+  return Number.isFinite(s) && s >= MIN_SCALE && s <= MAX_SCALE ? s : 1;
 }
 
 /** Clock for the current run: paused seconds banked so far + live session. */
@@ -60,9 +105,13 @@ export function RunningTimerWidget() {
   const qc = useQueryClient();
   const [pos, setPos] = useState<Pos | null>(loadPos);
   const [minimized, setMinimized] = useState(() => localStorage.getItem(MIN_KEY) === '1');
+  const [scale, setScale] = useState<number>(loadScale);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [, setNow] = useState(Date.now());
   const cardRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const dragRef = useRef<{ dx: number; dy: number; sx: number; sy: number } | null>(null);
+  const movedRef = useRef(false);
+  const resizeRef = useRef<{ startX: number; startScale: number } | null>(null);
 
   const activeQuery = useQuery({
     queryKey: ['dev-active'],
@@ -105,6 +154,11 @@ export function RunningTimerWidget() {
     mutationFn: (id: string) => api.post(`/dev-projects/${id}/stop`),
     onSuccess: invalidate,
   });
+  // Close the pop-out when the timer disappears (stopped) or on unmount.
+  useEffect(() => {
+    if (pipWindow && !active?.id) pipWindow.close();
+  }, [pipWindow, active?.id]);
+  useEffect(() => () => pipWindow?.close(), [pipWindow]);
   const pauseTimer = useMutation({
     mutationFn: (id: string) => api.post(`/dev-projects/${id}/pause`),
     onSuccess: invalidate,
@@ -119,13 +173,22 @@ export function RunningTimerWidget() {
   const dotColor = paused ? 'var(--warning, #f59e0b)' : 'var(--success, #22c55e)';
   const mutationError = stopTimer.isError || pauseTimer.isError || resumeTimer.isError;
 
+  // The whole card is a drag surface; buttons and the resize grip opt out.
   const onPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button, [data-resize-handle]')) return;
     const rect = cardRef.current!.getBoundingClientRect();
-    dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    // Switch from the default right/bottom anchor to explicit coordinates so
+    // dragging and top-left scaling share the same reference point.
+    if (!pos) setPos({ x: rect.left, y: rect.top });
+    dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, sx: e.clientX, sy: e.clientY };
+    movedRef.current = false;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
+    // 5px threshold so a tap on the minimized chip still reads as a click.
+    if (!movedRef.current && Math.hypot(e.clientX - dragRef.current.sx, e.clientY - dragRef.current.sy) < 5) return;
+    movedRef.current = true;
     const rect = cardRef.current!.getBoundingClientRect();
     setPos({
       x: Math.min(Math.max(0, e.clientX - dragRef.current.dx), Math.max(0, window.innerWidth - rect.width)),
@@ -133,8 +196,34 @@ export function RunningTimerWidget() {
     });
   };
   const onPointerUp = () => {
-    if (dragRef.current && pos) localStorage.setItem(POS_KEY, JSON.stringify(pos));
+    if (dragRef.current && movedRef.current && pos) localStorage.setItem(POS_KEY, JSON.stringify(pos));
     dragRef.current = null;
+  };
+
+  const onResizeDown = (e: React.PointerEvent) => {
+    resizeRef.current = { startX: e.clientX, startScale: scale };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onResizeMove = (e: React.PointerEvent) => {
+    if (!resizeRef.current) return;
+    const next = resizeRef.current.startScale + (e.clientX - resizeRef.current.startX) / 320;
+    setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, next)));
+  };
+  const onResizeUp = () => {
+    if (resizeRef.current) localStorage.setItem(SCALE_KEY, String(scale));
+    resizeRef.current = null;
+  };
+
+  const popOut = async () => {
+    if (!window.documentPictureInPicture) return;
+    try {
+      const pip = await window.documentPictureInPicture.requestWindow({ width: 300, height: 190 });
+      copyStylesTo(pip);
+      pip.addEventListener('pagehide', () => setPipWindow(null));
+      setPipWindow(pip);
+    } catch {
+      // Blocked (no user gesture / permissions) — widget simply stays in-page.
+    }
   };
 
   const toggleMinimized = () =>
@@ -148,20 +237,102 @@ export function RunningTimerWidget() {
     position: 'fixed',
     zIndex: 900,
     ...placement,
+    transform: `scale(${scale})`,
+    transformOrigin: pos ? 'top left' : 'bottom right',
     background: 'var(--surface)',
     border: '1px solid var(--border)',
     borderRadius: 12,
     boxShadow: 'var(--shadow-lg)',
     userSelect: 'none',
+    touchAction: 'none',
   };
+  const dragHandlers = {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel: onPointerUp,
+  };
+
+  const actionButtons = (
+    <div style={{ display: 'flex', gap: '0.5rem' }}>
+      {paused ? (
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ flex: 1 }}
+          disabled={resumeTimer.isPending}
+          onClick={() => resumeTimer.mutate(active.id)}
+        >
+          {resumeTimer.isPending ? 'Resuming…' : 'Resume'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ flex: 1 }}
+          disabled={pauseTimer.isPending}
+          onClick={() => pauseTimer.mutate(active.id)}
+        >
+          {pauseTimer.isPending ? 'Pausing…' : 'Pause'}
+        </button>
+      )}
+      <button
+        type="button"
+        className="btn btn-danger"
+        style={{ flex: 1 }}
+        disabled={stopTimer.isPending}
+        onClick={() => stopTimer.mutate(active.id)}
+      >
+        {stopTimer.isPending ? 'Stopping…' : 'Stop'}
+      </button>
+    </div>
+  );
+
+  if (pipWindow) {
+    return createPortal(
+      <div style={{ padding: '0.85rem 1rem', userSelect: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
+          <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontSize: '0.9rem' }}>
+            {active.name}
+          </strong>
+        </div>
+        <div
+          style={{
+            fontSize: '2rem',
+            fontWeight: 700,
+            fontVariantNumeric: 'tabular-nums',
+            margin: '0.35rem 0 0.1rem',
+            color: paused ? 'var(--warning, #f59e0b)' : 'inherit',
+          }}
+        >
+          {formatElapsed(active)}
+        </div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginBottom: '0.7rem' }}>
+          {paused && <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>⏸ Paused · </span>}
+          {formatTotal(active)}
+        </div>
+        {actionButtons}
+        {mutationError && (
+          <div className="error-text" style={{ fontSize: '0.75rem', marginTop: '0.4rem' }}>
+            Action failed — try again.
+          </div>
+        )}
+      </div>,
+      pipWindow.document.body,
+    );
+  }
 
   if (minimized) {
     return (
       <div
         ref={cardRef}
+        {...dragHandlers}
         style={{ ...baseStyle, padding: '0.5rem 0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        onClick={toggleMinimized}
-        title={`${active.name} — click to expand`}
+        onClick={() => {
+          if (!movedRef.current) toggleMinimized();
+        }}
+        title={`${active.name} — click to expand, drag to move`}
       >
         <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
         <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: '1rem', color: paused ? 'var(--warning, #f59e0b)' : 'inherit' }}>
@@ -172,17 +343,21 @@ export function RunningTimerWidget() {
   }
 
   return (
-    <div ref={cardRef} style={{ ...baseStyle, width: 320, padding: '1rem 1.25rem' }}>
-      <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 8, touchAction: 'none' }}
-      >
+    <div ref={cardRef} {...dragHandlers} style={{ ...baseStyle, width: 320, padding: '1rem 1.25rem', cursor: 'grab' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ color: 'var(--text-secondary, #888)', letterSpacing: 2 }}>⠿</span>
         <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
         <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontSize: '0.95rem' }}>{active.name}</strong>
+        {'documentPictureInPicture' in window && (
+          <button
+            type="button"
+            onClick={popOut}
+            title="Pop out — floats on top of all apps"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '0.95rem', lineHeight: 1 }}
+          >
+            ⧉
+          </button>
+        )}
         <button
           type="button"
           onClick={toggleMinimized}
@@ -207,43 +382,37 @@ export function RunningTimerWidget() {
         {paused && <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>⏸ Paused · </span>}
         {formatTotal(active)}
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        {paused ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ flex: 1 }}
-            disabled={resumeTimer.isPending}
-            onClick={() => resumeTimer.mutate(active.id)}
-          >
-            {resumeTimer.isPending ? 'Resuming…' : 'Resume'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ flex: 1 }}
-            disabled={pauseTimer.isPending}
-            onClick={() => pauseTimer.mutate(active.id)}
-          >
-            {pauseTimer.isPending ? 'Pausing…' : 'Pause'}
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn btn-danger"
-          style={{ flex: 1 }}
-          disabled={stopTimer.isPending}
-          onClick={() => stopTimer.mutate(active.id)}
-        >
-          {stopTimer.isPending ? 'Stopping…' : 'Stop'}
-        </button>
-      </div>
+      {actionButtons}
       {mutationError && (
         <div className="error-text" style={{ fontSize: '0.75rem', marginTop: '0.4rem' }}>
           Action failed — try again.
         </div>
       )}
+      <div
+        data-resize-handle
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeUp}
+        onPointerCancel={onResizeUp}
+        title="Drag to resize"
+        style={{
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 20,
+          height: 20,
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'flex-end',
+          padding: '0 3px 1px 0',
+          cursor: 'nwse-resize',
+          color: 'var(--text-secondary, #888)',
+          fontSize: 11,
+          lineHeight: 1,
+        }}
+      >
+        ◢
+      </div>
     </div>
   );
 }

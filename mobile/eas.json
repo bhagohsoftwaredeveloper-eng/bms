@@ -9,7 +9,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://0rex-server.tail7dcc9b.ts.net/api"
+        "EXPO_PUBLIC_API_URL": "https://0rex-server.tail7dcc9b.ts.net/api",
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
       }
     },
     "production": {

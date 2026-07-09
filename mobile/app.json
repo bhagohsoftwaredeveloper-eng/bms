@@ -41,6 +41,15 @@
         {
           "photosPermission": "Allow Beulah Field to attach installation photos as proof of service."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
       ]
     ],
     "extra": {

@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { api } from '@/api';
+import { api, fileUrl } from '@/api';
 import type { Job, JobStatus } from '@/types';
 
 const NEXT_STATUS: Partial<Record<JobStatus, { label: string; value: JobStatus }>> = {
@@ -124,6 +124,7 @@ export default function JobDetailScreen() {
 
   const next = NEXT_STATUS[job.jobStatus];
   const canSubmitProof = job.jobStatus === 'ON_GOING' || job.jobStatus === 'ASSIGNED';
+  const proofPhotos = Array.isArray(job.proof?.photoUrls) ? job.proof.photoUrls : [];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -145,6 +146,18 @@ export default function JobDetailScreen() {
         >
           <Text style={styles.buttonText}>{next.label}</Text>
         </TouchableOpacity>
+      )}
+
+      {job.proof && (
+        <View style={styles.proofBox}>
+          <Text style={styles.sectionTitle}>Submitted Proof</Text>
+          <Text style={styles.meta}>
+            Submitted: {new Date(job.proof.capturedAt).toLocaleString()}
+          </Text>
+          {proofPhotos.map((url) => (
+            <Image key={url} source={{ uri: fileUrl(url) }} style={styles.preview} />
+          ))}
+        </View>
       )}
 
       {canSubmitProof && (

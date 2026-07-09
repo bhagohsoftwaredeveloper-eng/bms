@@ -45,6 +45,12 @@ export async function clearTokens() {
   await SecureStore.deleteItemAsync(REFRESH_KEY);
 }
 
+/** Resolve a server-relative upload path (e.g. `/api/uploads/files/x.jpg`) to an absolute URL. */
+export function fileUrl(path: string): string {
+  if (path.startsWith('http')) return path;
+  return API_URL.replace(/\/api\/?$/, '') + path;
+}
+
 export const api = axios.create({ baseURL: API_URL });
 
 api.interceptors.request.use((config) => {

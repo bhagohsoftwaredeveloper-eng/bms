@@ -20,9 +20,14 @@ const STATUS_COLOR: Record<JobStatus, string> = {
   CANCELLED: '#6b7280',
 };
 
+const ACTIVE_STATUSES: JobStatus[] = ['ASSIGNED', 'ON_GOING', 'WAITING_ACTIVATION'];
+
+type JobFilter = 'ACTIVE' | 'COMPLETED';
+
 export default function JobsScreen() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [filter, setFilter] = useState<JobFilter>('ACTIVE');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +63,33 @@ export default function JobsScreen() {
     );
   }
 
+  const activeJobs = jobs.filter((j) => ACTIVE_STATUSES.includes(j.jobStatus));
+  const completedJobs = jobs.filter((j) => !ACTIVE_STATUSES.includes(j.jobStatus));
+  const visibleJobs = filter === 'ACTIVE' ? activeJobs : completedJobs;
+
   return (
+    <View style={styles.screen}>
+      <View style={styles.chipRow}>
+        {(
+          [
+            { key: 'ACTIVE', label: `Active (${activeJobs.length})` },
+            { key: 'COMPLETED', label: `Completed (${completedJobs.length})` },
+          ] as Array<{ key: JobFilter; label: string }>
+        ).map((chip) => (
+          <TouchableOpacity
+            key={chip.key}
+            style={[styles.chip, filter === chip.key && styles.chipActive]}
+            onPress={() => setFilter(chip.key)}
+          >
+            <Text style={[styles.chipText, filter === chip.key && styles.chipTextActive]}>
+              {chip.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     <FlatList
       contentContainerStyle={styles.list}
-      data={jobs}
+      data={visibleJobs}
       keyExtractor={(j) => j.id}
       refreshControl={
         <RefreshControl
@@ -73,7 +101,9 @@ export default function JobsScreen() {
         />
       }
       ListEmptyComponent={
-        <Text style={styles.empty}>{error ?? 'No jobs assigned to you yet.'}</Text>
+        <Text style={styles.empty}>
+          {error ?? (filter === 'ACTIVE' ? 'No active jobs.' : 'No completed jobs yet.')}
+        </Text>
       }
       renderItem={({ item }) => (
         <TouchableOpacity style={styles.card} onPress={() => router.push(`/job/${item.id}`)}>
@@ -92,11 +122,25 @@ export default function JobsScreen() {
         </TouchableOpacity>
       )}
     />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  screen: { flex: 1 },
+  chipRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
+  chip: {
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  chipActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  chipText: { fontSize: 13, fontWeight: '700', color: '#6b7280' },
+  chipTextActive: { color: '#fff' },
   list: { padding: 16, gap: 12, flexGrow: 1 },
   empty: { textAlign: 'center', color: '#6b7280', marginTop: 48 },
   card: {

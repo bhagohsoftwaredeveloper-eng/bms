@@ -28,6 +28,12 @@ export type JobStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 
+export interface InstallationProof {
+  id: string;
+  photoUrls: string[];
+  capturedAt: string;
+}
+
 export interface Job {
   id: string;
   clientId: string;
@@ -38,7 +44,7 @@ export interface Job {
   remarks: string | null;
   client?: { businessName: string; ownerName: string; contactNo: string; address: string | null };
   license?: { status: string } | null;
-  proof?: unknown | null;
+  proof?: InstallationProof | null;
 }
 
 export interface Earning {

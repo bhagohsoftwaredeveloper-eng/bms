@@ -1,4 +1,5 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
+import { Eye, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
@@ -267,6 +268,8 @@ const EMPTY_PROOF_FORM = { gpsLatitude: '', gpsLongitude: '' };
 function InstallerJobsView() {
   const queryClient = useQueryClient();
   const [proofJobId, setProofJobId] = useState<string | null>(null);
+  const [viewJobId, setViewJobId] = useState<string | null>(null);
+  const [viewPhotoUrl, setViewPhotoUrl] = useState<string | null>(null);
   const [proofForm, setProofForm] = useState(EMPTY_PROOF_FORM);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
@@ -355,6 +358,8 @@ function InstallerJobsView() {
   };
 
   const activeJobToProof = jobsQuery.data?.find(j => j.id === proofJobId);
+  const viewedJob = jobsQuery.data?.find(j => j.id === viewJobId);
+  const viewedPhotos = Array.isArray(viewedJob?.proof?.photoUrls) ? viewedJob.proof.photoUrls : [];
 
   return (
     <div>
@@ -454,6 +459,135 @@ function InstallerJobsView() {
         )}
       </Dialog>
 
+      <Dialog
+        isOpen={!!viewJobId}
+        onClose={() => setViewJobId(null)}
+        title="Job Details"
+        maxWidth={520}
+      >
+        {viewedJob && (
+          <div>
+            <div style={{ marginBottom: '1.25rem', padding: '0.75rem', background: 'var(--bg)', borderRadius: 8, fontSize: '0.85rem', display: 'grid', gap: '0.5rem' }}>
+              <div>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Client:</div>
+                <div style={{ fontWeight: 600 }}>{viewedJob.client?.businessName ?? '—'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Address:</div>
+                <div style={{ fontWeight: 600 }}>{viewedJob.client?.address ?? '—'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '1.5rem' }}>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Scheduled:</div>
+                  <div style={{ fontWeight: 600 }}>{new Date(viewedJob.scheduleDate).toLocaleDateString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Status:</div>
+                  <StatusBadge status={viewedJob.jobStatus} />
+                </div>
+              </div>
+              {viewedJob.remarks && (
+                <div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Remarks:</div>
+                  <div>{viewedJob.remarks}</div>
+                </div>
+              )}
+            </div>
+
+            {viewedJob.proof ? (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Submitted Proof</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                  Submitted: {new Date(viewedJob.proof.capturedAt).toLocaleString()}
+                </div>
+                {viewedPhotos.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {viewedPhotos.map((url) => (
+                      <img
+                        key={url}
+                        src={url}
+                        alt="Installation proof"
+                        onClick={() => setViewPhotoUrl(url)}
+                        style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No photos attached.</p>
+                )}
+                {viewedJob.proof.clientSignature && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.35rem' }}>Client signature:</div>
+                    <img
+                      src={viewedJob.proof.clientSignature}
+                      alt="Client signature"
+                      onClick={() => setViewPhotoUrl(viewedJob.proof!.clientSignature!)}
+                      style={{ maxHeight: 90, borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No proof submitted for this job yet.</p>
+            )}
+          </div>
+        )}
+      </Dialog>
+
+      {/* ── Proof photo viewer ── */}
+      {viewPhotoUrl && (
+        <div
+          onClick={() => setViewPhotoUrl(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '1.5rem',
+            cursor: 'zoom-out',
+          }}
+        >
+          <button
+            onClick={() => setViewPhotoUrl(null)}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.1)',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.1rem',
+            }}
+          >
+            <X size={16} />
+          </button>
+          <img
+            src={viewPhotoUrl}
+            alt="Installation proof"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              objectFit: 'contain',
+              borderRadius: 12,
+              boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
+              cursor: 'default',
+            }}
+          />
+        </div>
+      )}
+
       {statusWarning && (
         <div
           role="alert"
@@ -483,15 +617,16 @@ function InstallerJobsView() {
         </div>
       )}
 
-      <InstallerJobsTable data={jobsQuery.data ?? []} isLoading={jobsQuery.isLoading} isError={jobsQuery.isError} onUpdateStatus={(id, s) => updateStatus.mutate({ id, jobStatus: s })} onOpenProof={openProofForm} />
+      <InstallerJobsTable data={jobsQuery.data ?? []} isLoading={jobsQuery.isLoading} isError={jobsQuery.isError} onUpdateStatus={(id, s) => updateStatus.mutate({ id, jobStatus: s })} onOpenProof={openProofForm} onView={setViewJobId} />
     </div>
   );
 }
 
-function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenProof }: {
+function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenProof, onView }: {
   data: Job[]; isLoading: boolean; isError: boolean;
   onUpdateStatus: (id: string, s: JobStatus) => void;
   onOpenProof: (id: string) => void;
+  onView: (id: string) => void;
 }) {
   const pg = usePagination(data);
   return (
@@ -532,6 +667,17 @@ function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenPr
                       {job.jobStatus === 'WAITING_ACTIVATION' && (
                         <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onUpdateStatus(job.id, 'COMPLETED')}>Mark complete</button>
                       )}
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        title="View job details"
+                        aria-label="View job details"
+                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                        onClick={() => onView(job.id)}
+                      >
+                        <Eye size={14} />
+                        View
+                      </button>
                     </div>
                   </td>
                 </tr>
