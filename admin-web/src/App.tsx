@@ -8,6 +8,7 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DevProjectsPage } from './pages/DevProjectsPage';
+import { DevelopersPage } from './pages/DevelopersPage';
 import { DownloadLeadsPage } from './pages/DownloadLeadsPage';
 import { EarningsPage } from './pages/EarningsPage';
 import { JobOrderPage } from './pages/JobOrderPage';
@@ -40,6 +41,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/developers" element={<DevelopersPage />} />
       <Route element={<ProtectedShell />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/earnings" element={<EarningsPage />} />

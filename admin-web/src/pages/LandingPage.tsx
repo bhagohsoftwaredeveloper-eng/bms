@@ -2,24 +2,34 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
+  ArrowRight,
   BadgeCheck,
   BarChart3,
+  CalendarClock,
+  Camera,
   Check,
+  CheckCircle2,
   ClipboardList,
   Download,
   Globe,
   Key,
+  KeyRound,
   MapPin,
   Monitor,
   Moon,
+  Move,
   PhilippinePeso,
+  PictureInPicture2,
+  Scaling,
   ShieldCheck,
   Smartphone,
   Sun,
   Timer,
   Trophy,
+  UserCheck,
   Wallet,
   Wrench,
+  XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import './landing.css';
@@ -241,6 +251,14 @@ export function LandingPage() {
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [snapLight, setSnapLight] = useState(false);
   const [phoneStep, setPhoneStep] = useState(0);
+  const [timerSec, setTimerSec] = useState(2129); // demo timer starts at 00:35:29
+
+  useEffect(() => {
+    const t = setInterval(() => setTimerSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const timerClock = `${pad(Math.floor(timerSec / 3600))}:${pad(Math.floor((timerSec % 3600) / 60))}:${pad(timerSec % 60)}`;
 
   // Lead-capture gate: company details + email OTP required before any download/install.
   const [leadFor, setLeadFor] = useState<'apk' | 'desktop' | null>(null);
@@ -605,6 +623,58 @@ export function LandingPage() {
           </div>
         </section>
 
+        {/* ── Dev Project Timer spotlight ── */}
+        <section className="lp-section">
+          <div className="lp-mobile">
+            <div className="lp-reveal">
+              <div className="lp-kicker">Dev Project Timer</div>
+              <h2 className="lp-h2">Every dev hour, on the record</h2>
+              <p className="lp-sub" style={{ marginBottom: '1.4rem' }}>
+                Start a project timer and it follows you everywhere — a floating widget that stays on
+                every page of the console while you work. Starting a new task auto-stops the previous
+                one, so tracked hours are always honest. It even pops out of the browser entirely and
+                floats on top of VS Code, Excel, or anything else on your screen.
+              </p>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                <li style={{ display: 'flex', gap: '0.6rem', color: 'var(--lp-muted)', fontSize: '0.9rem' }}>
+                  <Move size={16} style={{ color: 'var(--lp-cyan)', flexShrink: 0, marginTop: 2 }} />
+                  Drag it anywhere, resize it from 60% to 200% — it remembers where you left it.
+                </li>
+                <li style={{ display: 'flex', gap: '0.6rem', color: 'var(--lp-muted)', fontSize: '0.9rem' }}>
+                  <PictureInPicture2 size={16} style={{ color: 'var(--lp-cyan)', flexShrink: 0, marginTop: 2 }} />
+                  Pop-out mode: a real always-on-top window, visible outside the browser.
+                </li>
+                <li style={{ display: 'flex', gap: '0.6rem', color: 'var(--lp-muted)', fontSize: '0.9rem' }}>
+                  <Activity size={16} style={{ color: 'var(--lp-cyan)', flexShrink: 0, marginTop: 2 }} />
+                  Pause, resume, stop — every session banks into the project&apos;s total tracked time.
+                </li>
+              </ul>
+            </div>
+            <div className="lp-timer-zone lp-reveal" aria-hidden="true">
+              <div className="lp-timer-widget">
+                <div className="lp-timer-head">
+                  <span className="lp-grip">⠿</span>
+                  <span className="lp-live-dot" />
+                  <strong>BEULAH KPI</strong>
+                  <span className="lp-min">–</span>
+                </div>
+                <div className="lp-timer-clock">{timerClock}</div>
+                <div className="lp-timer-total">417h 37m total tracked</div>
+                <div className="lp-timer-btns">
+                  <i className="lp-t-pause">Pause</i>
+                  <i className="lp-t-stop">Stop</i>
+                </div>
+                <span className="lp-t-grip2">◢</span>
+              </div>
+              <div className="lp-timer-tags">
+                <span className="lp-tag"><Move size={10} style={{ verticalAlign: '-1px' }} /> DRAGGABLE</span>
+                <span className="lp-tag"><Scaling size={10} style={{ verticalAlign: '-1px' }} /> RESIZABLE</span>
+                <span className="lp-tag"><PictureInPicture2 size={10} style={{ verticalAlign: '-1px' }} /> POP-OUT</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── Mobile app ── */}
         <section className="lp-section">
           <div className="lp-mobile">
@@ -639,6 +709,85 @@ export function LandingPage() {
                 <Smartphone size={17} /> Download Beulah Field APK
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* ── Before / After: proof of the installation flow ── */}
+        <section className="lp-section">
+          <div className="lp-reveal">
+            <div className="lp-kicker">Proof of Service</div>
+            <h2 className="lp-h2">Installations, before and after Orbit Console</h2>
+            <p className="lp-sub">
+              The difference isn&apos;t just software — it&apos;s a paper trail for every install, from
+              schedule to peso payout.
+            </p>
+          </div>
+
+          <div className="lp-ba-grid">
+            <div className="lp-ba lp-ba-before lp-reveal">
+              <h3>Before</h3>
+              <ul>
+                <li><XCircle size={16} /> Installations tracked in group chats and paper logbooks — jobs slip through.</li>
+                <li><XCircle size={16} /> No proof the installer actually went on-site or finished the job.</li>
+                <li><XCircle size={16} /> License keys in spreadsheets; activations delayed for days.</li>
+                <li><XCircle size={16} /> Installer pay computed manually at month-end — disputes every payday.</li>
+              </ul>
+            </div>
+            <div className="lp-ba lp-ba-after lp-reveal" style={{ transitionDelay: '90ms' }}>
+              <h3>With Orbit Console</h3>
+              <ul>
+                <li><CheckCircle2 size={16} /> Every job scheduled, assigned, and visible on one live board.</li>
+                <li><CheckCircle2 size={16} /> Photo + client signature + GPS lock submitted from the field — undeniable proof.</li>
+                <li><CheckCircle2 size={16} /> Proof triggers license activation the same day.</li>
+                <li><CheckCircle2 size={16} /> Earnings post automatically per completed job — payday is just a withdrawal away.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="lp-flow lp-reveal" aria-label="System flow">
+            <div className="lp-flow-step">
+              <span className="lp-flow-num">01</span>
+              <CalendarClock size={20} />
+              <b>Schedule</b>
+              <span>Office books the installation job</span>
+            </div>
+            <div className="lp-flow-arrow"><ArrowRight size={16} /></div>
+            <div className="lp-flow-step">
+              <span className="lp-flow-num">02</span>
+              <UserCheck size={20} />
+              <b>Assign</b>
+              <span>Installer gets it instantly on mobile</span>
+            </div>
+            <div className="lp-flow-arrow"><ArrowRight size={16} /></div>
+            <div className="lp-flow-step">
+              <span className="lp-flow-num">03</span>
+              <Camera size={20} />
+              <b>Install + Proof</b>
+              <span>Photos, signature, GPS from the site</span>
+            </div>
+            <div className="lp-flow-arrow"><ArrowRight size={16} /></div>
+            <div className="lp-flow-step">
+              <span className="lp-flow-num">04</span>
+              <KeyRound size={20} />
+              <b>Activate</b>
+              <span>License goes live against the proof</span>
+            </div>
+            <div className="lp-flow-arrow"><ArrowRight size={16} /></div>
+            <div className="lp-flow-step">
+              <span className="lp-flow-num">05</span>
+              <PhilippinePeso size={20} />
+              <b>Earn</b>
+              <span>Pay posts automatically, withdraw anytime</span>
+            </div>
+          </div>
+
+          <div className="lp-cta-row lp-reveal">
+            <button type="button" className="lp-btn lp-btn-primary" onClick={() => requestDownload('apk')}>
+              <Download size={17} /> Start with the Field App
+            </button>
+            <Link to="/login" className="lp-btn lp-btn-cyan">
+              <Globe size={17} /> See it Live — Sign In
+            </Link>
           </div>
         </section>
 
@@ -705,10 +854,7 @@ export function LandingPage() {
               </span>
             </div>
             <div className="lp-devs">
-              <small style={{ marginRight: '0.2rem' }}>DEVELOPED BY</small>
-              <span className="lp-dev-chip">Rex Domingo</span>
-              <span className="lp-dev-chip">Jhazon Enanoria</span>
-              <span className="lp-dev-chip">Nelmar Jim Luna</span>
+              <Link to="/developers" className="lp-footer-link">DEVELOPERS</Link>
             </div>
             <Link to="/login" className="lp-btn lp-btn-ghost" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}>
               Sign In
