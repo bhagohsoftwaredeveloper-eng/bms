@@ -200,7 +200,7 @@ export function SimplePieChart({ data, size = 220 }: SimplePieChartProps) {
 
   return (
     <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: '100%', maxWidth: size, height: 'auto', flexShrink: 1 }}>
         <defs>
           {slices.map((_s, i) => (
             <filter key={i} id={`glow${i}`}>

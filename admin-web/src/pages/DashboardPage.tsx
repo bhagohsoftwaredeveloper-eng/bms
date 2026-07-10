@@ -372,7 +372,7 @@ function KpiWidget() {
 
   return (
     <div className="card" style={{ marginTop: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: '1rem' }}>My KPI — {now.toLocaleString('default', { month: 'long' })} {now.getFullYear()}</div>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Performance scorecard</div>

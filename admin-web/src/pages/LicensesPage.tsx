@@ -576,7 +576,7 @@ export function LicensesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>Licenses</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>

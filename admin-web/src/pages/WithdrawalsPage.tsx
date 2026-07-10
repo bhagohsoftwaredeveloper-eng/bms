@@ -1,7 +1,7 @@
 import { type FormEvent, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImageIcon, Paperclip, X, ZoomIn } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, fileUrl } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -141,7 +141,7 @@ export function WithdrawalsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>{canProcess ? 'Withdrawal Requests' : 'My Withdrawals'}</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
@@ -457,7 +457,7 @@ export function WithdrawalsPage() {
             <X size={16} />
           </button>
           <img
-            src={viewProofUrl}
+            src={fileUrl(viewProofUrl)}
             alt="Payment proof"
             onClick={(e) => e.stopPropagation()}
             style={{

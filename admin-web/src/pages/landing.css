@@ -164,7 +164,7 @@
   transition: color 0.2s ease, border-color 0.2s ease;
 }
 .lp-theme-toggle:hover { color: var(--lp-cyan); border-color: var(--lp-cyan); }
-.lp-window-body { display: grid; grid-template-columns: 42px 1fr; }
+.lp-window-body { display: grid; grid-template-columns: 42px minmax(0, 1fr); }
 .lp-mini-nav { border-right: 1px solid var(--w-border); padding: 0.8rem 0; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
 .lp-mini-nav i { width: 16px; height: 16px; border-radius: 5px; background: rgba(148, 163, 184, 0.18); }
 .lp-mini-nav i.lp-on { background: var(--lp-indigo); box-shadow: 0 0 10px rgba(99, 102, 241, 0.7); }
@@ -174,7 +174,7 @@
 .lp-stat b { display: block; font-family: var(--lp-mono); font-size: 0.8rem; font-weight: 600; color: var(--w-text); white-space: nowrap; }
 .lp-stat b.lp-green { color: #34d399; }
 .lp-stat span { font-size: 0.5rem; color: var(--w-muted); letter-spacing: 0.04em; text-transform: uppercase; display: block; margin-top: 1px; }
-.lp-charts { display: grid; grid-template-columns: 1fr 1.3fr; gap: 0.6rem; }
+.lp-charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 0.6rem; }
 .lp-panel {
   border: 1px solid var(--w-border); border-radius: 9px; padding: 0.6rem;
   background: var(--w-surface);
@@ -481,6 +481,12 @@
   background: rgba(148, 163, 184, 0.05);
 }
 
+/* Grid/flex items must be allowed to shrink below their content width,
+   or a wide mock forces the whole page wider than a phone viewport. */
+.lp-hero > *, .lp-mobile > *, .lp-kpi > *, .lp-ba-grid > *,
+.lp-grid > *, .lp-dl-grid > *, .lp-devs-grid > * { min-width: 0; }
+.lp-shot, .lp-window { max-width: 100%; }
+
 /* ── Responsive ── */
 @media (max-width: 960px) {
   .lp-hero { grid-template-columns: 1fr; padding-top: 2.5rem; }
@@ -495,9 +501,17 @@
   .lp-devs-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
+  .lp-wrap { padding: 0 1.1rem; }
+  .lp-hero { padding: 2rem 0 3rem; gap: 2rem; }
+  .lp-section { padding: 3rem 0; }
   .lp-grid { grid-template-columns: 1fr; }
   .lp-stats { grid-template-columns: repeat(2, 1fr); }
   .lp-charts { grid-template-columns: 1fr; }
+  .lp-btn { padding: 0.65rem 1.05rem; font-size: 0.85rem; }
+  .lp-hero-ctas .lp-btn { flex: 1 1 auto; justify-content: center; }
+  .lp-kpi { padding: 1.3rem; }
+  .lp-topbar { flex-wrap: wrap; gap: 0.6rem; }
+  .lp-footer-top { justify-content: center; text-align: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

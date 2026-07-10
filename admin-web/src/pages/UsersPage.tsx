@@ -231,7 +231,7 @@ export function UsersPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>Team</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>

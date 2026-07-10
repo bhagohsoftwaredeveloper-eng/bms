@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, fileUrl } from '../lib/api';
 import type { BackupFile, CompanyProfile, ResetModuleInfo } from '../lib/types';
 import { Dialog } from '../components/Dialog';
 import { AuditLogsPage } from './AuditLogsPage';
@@ -111,7 +111,7 @@ function CompanyProfileTab() {
             {form.logoUrl ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
                 <img
-                  src={form.logoUrl}
+                  src={fileUrl(form.logoUrl)}
                   alt="Company logo"
                   style={{ maxHeight: 56, maxWidth: 160, objectFit: 'contain', borderRadius: 4 }}
                 />
@@ -249,7 +249,7 @@ function BackupsTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
         <p style={{ color: 'var(--text-muted)', margin: 0 }}>
           Create and download full snapshots of the database for safekeeping.
         </p>

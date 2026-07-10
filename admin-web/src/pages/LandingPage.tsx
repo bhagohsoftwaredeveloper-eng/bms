@@ -31,7 +31,7 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, fileUrl } from '../lib/api';
 import './landing.css';
 
 // Chromium-only; absent from the TS DOM lib.
@@ -41,6 +41,10 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const APK_URL = '/downloads/beulah-field.apk';
+// Canonical copy on the office-PC funnel. Used when the current origin doesn't
+// host the APK: Railway's filesystem is ephemeral (downloads/ is empty there)
+// and the Vite dev server answers this path with the SPA's index.html.
+const APK_FALLBACK_URL = 'https://0rex-server.tail7dcc9b.ts.net/downloads/beulah-field.apk';
 const LEAD_KEY = 'lp-lead-done';
 
 const FEATURES = [
@@ -305,9 +309,27 @@ export function LandingPage() {
     }
   };
 
+  // Resolve where the APK actually lives: prefer the current origin (or the dev
+  // API), fall back to the funnel when this deployment doesn't host the file.
+  const [apkUrl, setApkUrl] = useState(() => fileUrl(APK_URL));
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(fileUrl(APK_URL), { method: 'HEAD' });
+        const type = res.headers.get('content-type') ?? '';
+        if (res.ok && !type.includes('text/html')) return; // real APK is here
+      } catch {
+        // origin unreachable / CORS — use the fallback
+      }
+      if (!cancelled) setApkUrl(APK_FALLBACK_URL);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const triggerApkDownload = () => {
     const a = document.createElement('a');
-    a.href = APK_URL;
+    a.href = apkUrl;
     a.download = 'beulah-field.apk';
     document.body.appendChild(a);
     a.click();
@@ -883,7 +905,7 @@ export function LandingPage() {
                     <p className="lp-modal-sub">
                       Your download should have started. If it didn&apos;t, tap the button below.
                     </p>
-                    <a href={APK_URL} download className="lp-btn lp-btn-primary">
+                    <a href={apkUrl} download className="lp-btn lp-btn-primary">
                       <Download size={16} /> Download APK
                     </a>
                   </>

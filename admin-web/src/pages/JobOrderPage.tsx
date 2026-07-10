@@ -29,7 +29,7 @@ async function inlineImages(root: HTMLElement): Promise<void> {
 
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import type { Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderStatus, SoftwareProduct } from '../lib/types';
 
@@ -578,7 +578,7 @@ export function JobOrderPage() {
           status={jo?.status ?? 'DRAFT'}
           createdAt={jo?.createdAt}
           companyName={companyProfileQuery.data?.businessName}
-          companyLogoUrl={logoDataQuery.data ?? companyProfileQuery.data?.logoUrl ?? undefined}
+          companyLogoUrl={logoDataQuery.data ?? (companyProfileQuery.data?.logoUrl ? fileUrl(companyProfileQuery.data.logoUrl) : undefined)}
           companyAddress={companyProfileQuery.data?.address ?? undefined}
           companyPhone={companyProfileQuery.data?.phone ?? undefined}
           companyEmail={companyProfileQuery.data?.email ?? undefined}
@@ -590,7 +590,7 @@ export function JobOrderPage() {
       {/* ── Screen layout ───────────────────────────────────────────────────── */}
       <div>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
           <div>
             <button
               type="button"

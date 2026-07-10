@@ -554,6 +554,18 @@ input[type="text"] {
 /* Mobile layout is handled by the JS off-canvas drawer in AdminLayout.
    (Legacy static-collapse rules removed — they fought the fixed drawer.) */
 
+@media (max-width: 768px) {
+  h1 { font-size: 1.45rem; }
+  h2 { font-size: 1.15rem; }
+
+  .card { padding: 1.1rem; border-radius: 12px; }
+
+  .dialog-overlay { padding: 0.6rem; }
+  .dialog-content { max-height: 94dvh; }
+
+  .btn { padding: 0.55rem 1rem; }
+}
+
 /* ============================================================
    Aurora-glass login page
    ============================================================ */
@@ -1015,13 +1027,26 @@ html, body { max-width: 100%; overflow-x: hidden; }
    ============================================================ */
 @media (max-width: 768px) {
   [style*="minmax(460px"],
+  [style*="minmax(450px"],
   [style*="minmax(440px"],
   [style*="minmax(420px"],
   [style*="minmax(400px"],
+  [style*="minmax(340px"],
   [style*="minmax(320px"],
   [style*="minmax(300px"],
   [style*="minmax(280px"],
-  [style*="minmax(260px"] {
+  [style*="minmax(260px"],
+  [style*="minmax(0, 1fr) 340px"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ============================================================
+   Phones: two-column detail/form grids stack to one column.
+   The Job Order print template must keep its layout for PDFs.
+   ============================================================ */
+@media (max-width: 560px) {
+  [style*="grid-template-columns: 1fr 1fr"]:not(#job-order-print *) {
     grid-template-columns: 1fr !important;
   }
 }

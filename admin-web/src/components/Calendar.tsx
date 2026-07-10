@@ -57,12 +57,12 @@ export function Calendar({ events = [], onDateSelect }: CalendarProps) {
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: '0.75rem',
-        padding: '1.5rem',
+        padding: 'clamp(0.75rem, 2.5vw, 1.5rem)',
         width: '100%',
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '0.75rem', flexWrap: 'wrap' }}>
         <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{monthName}</h3>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
@@ -118,8 +118,8 @@ export function Calendar({ events = [], onDateSelect }: CalendarProps) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
-          gap: '0.5rem',
+          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+          gap: 'clamp(3px, 1vw, 0.5rem)',
           marginBottom: '0.5rem',
         }}
       >
@@ -128,10 +128,10 @@ export function Calendar({ events = [], onDateSelect }: CalendarProps) {
             key={day}
             style={{
               textAlign: 'center',
-              fontSize: '0.875rem',
+              fontSize: 'clamp(0.7rem, 2vw, 0.875rem)',
               fontWeight: 600,
               color: 'var(--text-muted)',
-              padding: '0.5rem',
+              padding: 'clamp(3px, 1vw, 0.5rem)',
             }}
           >
             {day}
@@ -143,8 +143,8 @@ export function Calendar({ events = [], onDateSelect }: CalendarProps) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
-          gap: '0.5rem',
+          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+          gap: 'clamp(3px, 1vw, 0.5rem)',
         }}
       >
         {days.map((day, i) => {
@@ -158,8 +158,9 @@ export function Calendar({ events = [], onDateSelect }: CalendarProps) {
               key={i}
               onClick={() => onDateSelect?.(day)}
               style={{
-                minHeight: '80px',
-                padding: '0.5rem',
+                minHeight: 'clamp(56px, 14vw, 80px)',
+                padding: 'clamp(3px, 1vw, 0.5rem)',
+                overflow: 'hidden',
                 border: '1px solid var(--border)',
                 borderRadius: '0.375rem',
                 background: isCurrentMonth ? 'var(--surface)' : 'var(--surface-secondary)',
@@ -179,15 +180,14 @@ export function Calendar({ events = [], onDateSelect }: CalendarProps) {
             >
               <div
                 style={{
-                  fontSize: '0.875rem',
+                  fontSize: 'clamp(0.72rem, 2vw, 0.875rem)',
                   fontWeight: isToday ? 'bold' : 'normal',
                   marginBottom: '0.25rem',
-                  padding: isToday ? '0.25rem 0.5rem' : 0,
+                  padding: isToday ? '0.15rem 0.35rem' : 0,
                   background: isToday ? 'var(--accent)' : 'transparent',
                   color: isToday ? 'var(--accent-contrast)' : 'var(--text)',
                   borderRadius: '0.25rem',
                   display: 'inline-block',
-                  minWidth: '20px',
                   textAlign: 'center',
                 }}
               >

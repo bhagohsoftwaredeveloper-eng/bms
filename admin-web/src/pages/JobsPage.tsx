@@ -1,7 +1,7 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
 import { Eye, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, fileUrl } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -75,7 +75,7 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>Installations</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
@@ -505,7 +505,7 @@ function InstallerJobsView() {
                     {viewedPhotos.map((url) => (
                       <img
                         key={url}
-                        src={url}
+                        src={fileUrl(url)}
                         alt="Installation proof"
                         onClick={() => setViewPhotoUrl(url)}
                         style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }}
@@ -519,7 +519,7 @@ function InstallerJobsView() {
                   <div style={{ marginTop: '0.75rem' }}>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.35rem' }}>Client signature:</div>
                     <img
-                      src={viewedJob.proof.clientSignature}
+                      src={fileUrl(viewedJob.proof.clientSignature)}
                       alt="Client signature"
                       onClick={() => setViewPhotoUrl(viewedJob.proof!.clientSignature!)}
                       style={{ maxHeight: 90, borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }}
@@ -573,7 +573,7 @@ function InstallerJobsView() {
             <X size={16} />
           </button>
           <img
-            src={viewPhotoUrl}
+            src={fileUrl(viewPhotoUrl)}
             alt="Installation proof"
             onClick={(e) => e.stopPropagation()}
             style={{

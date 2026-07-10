@@ -172,7 +172,7 @@ export function AnalyticsPage() {
 
       {/* ── Period selector for KPI ── */}
       <h2 style={{ marginTop: '2.5rem', marginBottom: '0.25rem' }}>Team KPI Performance</h2>
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <select className="input" style={{ width: 130 }} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
           {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
         </select>

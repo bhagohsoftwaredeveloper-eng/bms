@@ -6,6 +6,12 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
 });
 
+/** Resolve a server-relative upload path (e.g. `/api/uploads/files/x.jpg`) to an absolute URL. */
+export function fileUrl(path: string): string {
+  if (/^(https?:|data:|blob:)/.test(path)) return path;
+  return (import.meta.env.VITE_API_URL ?? '/api').replace(/\/api\/?$/, '') + path;
+}
+
 api.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState();
   if (accessToken) {
