@@ -236,6 +236,24 @@ function BackupsTab() {
     },
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadBackup = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return api.post<BackupFile>('/backups/upload', form);
+    },
+    onSuccess: () => {
+      setError('');
+      qc.invalidateQueries({ queryKey: ['backups'] });
+    },
+    onError: (err) => {
+      const msg = (err as AxiosError<{ message?: string }>).response?.data?.message;
+      setError(msg || 'Upload failed. Make sure the file is a .sql backup.');
+    },
+  });
+
   const deleteBackup = useMutation({
     mutationFn: (filename: string) => api.delete(`/backups/${filename}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['backups'] }),
@@ -257,9 +275,30 @@ function BackupsTab() {
         <p style={{ color: 'var(--text-muted)', margin: 0 }}>
           Create and download full snapshots of the database for safekeeping.
         </p>
-        <button type="button" className="btn btn-primary" disabled={createBackup.isPending} onClick={() => createBackup.mutate()}>
-          {createBackup.isPending ? 'Creating…' : 'Create backup'}
-        </button>
+        <span style={{ display: 'inline-flex', gap: '0.5rem' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".sql"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadBackup.mutate(f);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={uploadBackup.isPending}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploadBackup.isPending ? 'Uploading…' : 'Upload backup'}
+          </button>
+          <button type="button" className="btn btn-primary" disabled={createBackup.isPending} onClick={() => createBackup.mutate()}>
+            {createBackup.isPending ? 'Creating…' : 'Create backup'}
+          </button>
+        </span>
       </div>
 
       {error && <p className="error-text">{error}</p>}
