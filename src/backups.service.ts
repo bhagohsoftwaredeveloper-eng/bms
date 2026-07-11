@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
@@ -26,6 +26,21 @@ function resolveMysqldumpPath(): string {
   }
 
   return 'mysqldump';
+}
+
+/**
+ * Turn a raw child-process failure into a human-readable reason. Distinguishes a
+ * genuinely missing binary (ENOENT) from a runtime dump error (which carries the
+ * real cause on stderr — e.g. auth failure or a MySQL-version incompatibility on
+ * the Railway MySQL 8 server), so the diagnosis isn't a guess.
+ */
+export function describeBackupError(err: unknown, bin: string): string {
+  const e = err as (NodeJS.ErrnoException & { stderr?: string | Buffer }) | undefined;
+  if (e?.code === 'ENOENT') {
+    return `mysqldump executable not found (looked for "${bin}"). Install the MySQL client on the server — on Railway ensure nixpacks.toml lists "default-mysql-client", or set MYSQLDUMP_PATH.`;
+  }
+  const stderr = e?.stderr?.toString().trim();
+  return stderr || e?.message || 'Unknown error while running mysqldump';
 }
 
 export interface BackupFile {
@@ -61,20 +76,29 @@ export class BackupsService {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `sdlmp-${timestamp}.sql`;
     const outputPath = join(BACKUP_DIR, filename);
+    const bin = resolveMysqldumpPath();
 
-    await execFileAsync(
-      resolveMysqldumpPath(),
-      [
-        '-h', host,
-        '-P', port,
-        '-u', user,
-        '--single-transaction',
-        '--routines',
-        `--result-file=${outputPath}`,
-        dbName,
-      ],
-      { env: { ...process.env, MYSQL_PWD: password } },
-    );
+    try {
+      await execFileAsync(
+        bin,
+        [
+          '-h', host,
+          '-P', port,
+          '-u', user,
+          '--single-transaction',
+          '--routines',
+          `--result-file=${outputPath}`,
+          dbName,
+        ],
+        { env: { ...process.env, MYSQL_PWD: password } },
+      );
+    } catch (err) {
+      const detail = describeBackupError(err, bin);
+      new Logger(BackupsService.name).error(`Backup failed: ${detail}`);
+      // Clean up any partial/empty result file mysqldump may have left behind.
+      if (existsSync(outputPath)) unlinkSync(outputPath);
+      throw new InternalServerErrorException(`Backup failed: ${detail}`);
+    }
 
     const stats = statSync(outputPath);
     return { filename, size: stats.size, createdAt: stats.birthtime };

@@ -171,10 +171,9 @@ export class ResetService {
     let backup: BackupFile;
     try {
       backup = backupFilename ? await this.tryReuseBackup(backupFilename) : await this.backups.create();
-    } catch {
-      throw new BadRequestException(
-        'Auto-backup failed (is mysqldump available on the server?). Reset aborted for safety.',
-      );
+    } catch (err) {
+      const reason = (err as Error)?.message ?? 'unknown error';
+      throw new BadRequestException(`Auto-backup failed — reset aborted for safety. ${reason}`);
     }
 
     await this.prisma.$transaction((tx) => mod.reset(tx));
