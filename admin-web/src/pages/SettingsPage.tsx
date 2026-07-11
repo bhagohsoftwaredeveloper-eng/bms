@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AxiosError } from 'axios';
 import { api, fileUrl } from '../lib/api';
 import type { BackupFile, CompanyProfile, ResetModuleInfo } from '../lib/types';
 import { Dialog } from '../components/Dialog';
@@ -229,7 +230,10 @@ function BackupsTab() {
       setError('');
       qc.invalidateQueries({ queryKey: ['backups'] });
     },
-    onError: () => setError('Failed to create backup. Make sure mysqldump is installed and accessible on the server.'),
+    onError: (err) => {
+      const serverMessage = (err as AxiosError<{ message?: string }>).response?.data?.message;
+      setError(serverMessage || 'Failed to create backup. Make sure mysqldump is installed and accessible on the server.');
+    },
   });
 
   const deleteBackup = useMutation({
