@@ -11,7 +11,16 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="(tabs)"
+            options={{
+              headerShown: true,
+              title: 'Beulah Field',
+              headerStyle: { backgroundColor: '#4f46e5' },
+              headerTintColor: '#fff',
+              headerTitleStyle: { fontWeight: '700' },
+            }}
+          />
           <Stack.Screen name="admin" />
           <Stack.Screen
             name="job/[id]"
