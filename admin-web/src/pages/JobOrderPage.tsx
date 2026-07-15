@@ -170,6 +170,66 @@ function generateClientCode(): string {
   return code;
 }
 
+// ─── Wizard steps ─────────────────────────────────────────────────────────────
+
+const WIZARD_STEPS = [
+  { num: 1, label: 'Client & Project' },
+  { num: 2, label: 'Materials / Package' },
+  { num: 3, label: 'Payments' },
+] as const;
+
+function StepIndicator({ step, onStep, paymentsEnabled }: { step: number; onStep: (n: 1 | 2 | 3) => void; paymentsEnabled: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+      {WIZARD_STEPS.map((s, i) => {
+        const disabled = s.num === 3 && !paymentsEnabled;
+        const active = step === s.num;
+        return (
+          <div key={s.num} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {i > 0 && <div style={{ width: 24, height: 1, background: 'var(--border)' }} />}
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onStep(s.num as 1 | 2 | 3)}
+              title={disabled ? 'Save the job order to record payments' : undefined}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.45 : 1,
+              }}
+            >
+              <span
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  background: active ? 'var(--accent)' : 'var(--border)',
+                  color: active ? '#fff' : 'var(--text-muted)',
+                }}
+              >
+                {s.num}
+              </span>
+              <span style={{ fontSize: '0.85rem', fontWeight: active ? 700 : 500, color: active ? 'var(--text)' : 'var(--text-muted)' }}>
+                {s.label}
+              </span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Line item helpers ────────────────────────────────────────────────────────
 
 interface LineItem {
@@ -329,6 +389,7 @@ export function JobOrderPage() {
   const [cameraCount, setCameraCount] = useState(0);
   const [cameraRate, setCameraRate] = useState(0);
   const [laborPct, setLaborPct] = useState(20);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0 });
   const [showCustomForm, setShowCustomForm] = useState(false);
 
@@ -492,6 +553,9 @@ export function JobOrderPage() {
   const parent = jobQuery.data;
 
   const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
+
+  // Payments require a saved order; fall back to step 2 if the order vanishes.
+  const effectiveStep = step === 3 && !jo?.id ? 2 : step;
 
   const laborIncentive =
     joType === 'CCTV' ? cameraCount * cameraRate
@@ -684,10 +748,6 @@ export function JobOrderPage() {
           </div>
         </div>
 
-        {jo?.id && (
-          <JobOrderPayments jobOrderId={jo.id} canVoid={role === 'SUPER_ADMIN' || role === 'ADMIN_STAFF'} />
-        )}
-
         {/* Parent info banner */}
         {parent && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', gap: '2rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
@@ -711,10 +771,12 @@ export function JobOrderPage() {
           gap: '1.5rem',
           alignItems: 'start'
         }}>
-          {/* ── Left column ── */}
+          {/* ── Left column: wizard ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', minWidth: 0 }}>
+            <StepIndicator step={effectiveStep} onStep={setStep} paymentsEnabled={!!jo?.id} />
 
-            {/* Client & System */}
+            {/* Step 1: Client & Project */}
+            {effectiveStep === 1 && (
             <section className="card">
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Client & Project</h2>
               <div className="field">
@@ -819,9 +881,16 @@ export function JobOrderPage() {
                   placeholder="Delivery instructions, special requests…"
                 />
               </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                <button type="button" className="btn btn-primary" onClick={() => setStep(2)}>
+                  Next →
+                </button>
+              </div>
             </section>
+            )}
 
-            {/* Materials / Package */}
+            {/* Step 2: Materials / Package */}
+            {effectiveStep === 2 && (
             <section className="card">
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Materials / Package</h2>
 
@@ -1021,7 +1090,35 @@ export function JobOrderPage() {
                   </div>
                 </form>
               )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>
+                  ← Back
+                </button>
+                {jo?.id ? (
+                  <button type="button" className="btn btn-primary" onClick={() => setStep(3)}>
+                    Next →
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Save the job order to record payments.
+                  </span>
+                )}
+              </div>
             </section>
+            )}
+
+            {/* Step 3: Payments */}
+            {effectiveStep === 3 && jo?.id && (
+              <>
+                <JobOrderPayments jobOrderId={jo.id} canVoid={role === 'SUPER_ADMIN' || role === 'ADMIN_STAFF'} />
+                <div>
+                  <button type="button" className="btn btn-secondary" onClick={() => setStep(2)}>
+                    ← Back
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* ── Right column: Summary ── */}
