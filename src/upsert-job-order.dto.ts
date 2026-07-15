@@ -10,7 +10,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType, JobOrderStatus, JobOrderType } from '@prisma/client';
+import { DiscountType, DocType, JobOrderStatus, JobOrderType } from '@prisma/client';
 
 export class JobOrderItemDto {
   @IsString()
@@ -86,6 +86,10 @@ export class UpsertJobOrderDto {
   @Min(0)
   @Max(100)
   laborPct?: number;
+
+  @IsOptional()
+  @IsEnum(DocType)
+  docType?: DocType;
 
   @IsArray()
   @ValidateNested({ each: true })

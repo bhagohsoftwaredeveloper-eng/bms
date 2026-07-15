@@ -115,6 +115,13 @@ enum JobOrderType {
   SIGNAGE
 }
 
+enum DocType {
+  JOB_ORDER
+  QUOTATION
+  INVOICE
+  RECEIPT
+}
+
 enum DevProjectStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -399,6 +406,7 @@ model JobOrder {
   cameraCount  Int?           @map("camera_count")
   cameraRate   Decimal?       @map("camera_rate") @db.Decimal(12, 2)
   laborPct     Decimal?       @map("labor_pct") @db.Decimal(5, 2)
+  docType      DocType        @default(JOB_ORDER) @map("doc_type")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `job_orders`
+    ADD COLUMN `doc_type` ENUM('JOB_ORDER', 'QUOTATION', 'INVOICE', 'RECEIPT') NOT NULL DEFAULT 'JOB_ORDER';

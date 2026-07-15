@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobOrderStatus, JobOrderType } from '@prisma/client';
+import { DocType, JobOrderStatus, JobOrderType } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
@@ -37,6 +37,7 @@ export class JobOrdersService {
       cameraCount: dto.cameraCount ?? null,
       cameraRate: dto.cameraRate ?? null,
       laborPct: dto.laborPct ?? null,
+      docType: dto.docType ?? DocType.JOB_ORDER,
     };
     const newCompleted = data.status === JobOrderStatus.COMPLETED;
 
