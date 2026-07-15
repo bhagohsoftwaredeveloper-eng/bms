@@ -6,10 +6,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType, JobOrderStatus } from '@prisma/client';
+import { DiscountType, JobOrderStatus, JobOrderType } from '@prisma/client';
 
 export class JobOrderItemDto {
   @IsString()
@@ -65,6 +66,26 @@ export class UpsertJobOrderDto {
   @IsOptional()
   @IsEnum(JobOrderStatus)
   status?: JobOrderStatus;
+
+  @IsOptional()
+  @IsEnum(JobOrderType)
+  type?: JobOrderType;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cameraCount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cameraRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  laborPct?: number;
 
   @IsArray()
   @ValidateNested({ each: true })

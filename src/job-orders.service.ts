@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobOrderStatus } from '@prisma/client';
+import { JobOrderStatus, JobOrderType } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
 import { UpsertJobOrderDto } from './upsert-job-order.dto';
+import { ensureLaborEarning } from './job-order-labor.util';
 
 const INCLUDE_FULL = {
   client: true,
@@ -32,6 +33,10 @@ export class JobOrdersService {
       discountType: dto.discountType ?? 'FIXED',
       remarks: dto.remarks ?? null,
       status: dto.status ?? JobOrderStatus.DRAFT,
+      type: dto.type ?? JobOrderType.SOFTWARE,
+      cameraCount: dto.cameraCount ?? null,
+      cameraRate: dto.cameraRate ?? null,
+      laborPct: dto.laborPct ?? null,
     };
     const newCompleted = data.status === JobOrderStatus.COMPLETED;
 
@@ -82,6 +87,9 @@ export class JobOrdersService {
         newCompleted,
         user.id,
       );
+
+      // CCTV/Signage: guarantee the installer's labor earning once finalized.
+      await ensureLaborEarning(tx, jobOrder);
 
       return jobOrder;
     });
