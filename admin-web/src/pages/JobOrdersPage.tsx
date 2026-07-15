@@ -5,7 +5,13 @@ import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
-import type { Job, JobOrder } from '../lib/types';
+import type { Job, JobOrder, JobOrderType } from '../lib/types';
+
+const JO_TYPE_LABELS: Record<JobOrderType, string> = {
+  SOFTWARE: 'Software',
+  CCTV: 'CCTV',
+  SIGNAGE: 'Signage',
+};
 
 export function JobOrdersPage() {
   const navigate = useNavigate();
@@ -33,9 +39,9 @@ export function JobOrdersPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ marginBottom: '0.25rem' }}>Software JO</h1>
+          <h1 style={{ marginBottom: '0.25rem' }}>Project Job Order</h1>
           <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-            List of all software deployment and hardware package job orders.
+            List of all software, CCTV, and signage installation job orders.
           </p>
         </div>
         <button
@@ -43,7 +49,7 @@ export function JobOrdersPage() {
           className="btn btn-primary"
           onClick={() => setShowCreate(true)}
         >
-          Create Software JO
+          Create Project JO
         </button>
       </div>
 
@@ -120,6 +126,7 @@ export function JobOrdersPage() {
               <tr>
                 <th>JO No.</th>
                 <th>Client</th>
+                <th>Type</th>
                 <th>Product</th>
                 <th>Sale Price</th>
                 <th>Total</th>
@@ -142,7 +149,12 @@ export function JobOrdersPage() {
                       JO-{jo.id.slice(0, 8).toUpperCase()}
                     </td>
                     <td style={{ fontWeight: 500 }}>{jo.client?.businessName ?? jo.clientId}</td>
-                    <td>{jo.product?.productName ?? jo.productId}</td>
+                    <td>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: 999, background: 'var(--accent-light)', color: 'var(--accent)' }}>
+                        {JO_TYPE_LABELS[jo.type] ?? jo.type}
+                      </span>
+                    </td>
+                    <td>{jo.product?.productName ?? (jo.type === 'SOFTWARE' ? jo.productId : '—')}</td>
                     <td>₱{Number(jo.salePrice).toLocaleString()}</td>
                     <td style={{ fontWeight: 600 }}>₱{grandTotal.toLocaleString()}</td>
                     <td>

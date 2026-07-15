@@ -636,7 +636,7 @@ function SalesStaffDashboard() {
               style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
               onClick={() => navigate('/job-orders/software')}
             >
-              Software JOs
+              Project JOs
             </button>
           </div>
         </div>

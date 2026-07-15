@@ -164,6 +164,8 @@ export interface JobOrderItem {
   createdAt: string;
 }
 
+export type JobOrderType = 'SOFTWARE' | 'CCTV' | 'SIGNAGE';
+
 export interface JobOrder {
   id: string;
   jobId: string | null;
@@ -174,6 +176,10 @@ export interface JobOrder {
   discountType: DiscountType;
   remarks: string | null;
   status: JobOrderStatus;
+  type: JobOrderType;
+  cameraCount: number | null;
+  cameraRate: string | null;
+  laborPct: string | null;
   createdAt: string;
   updatedAt: string;
   job?: Job;
