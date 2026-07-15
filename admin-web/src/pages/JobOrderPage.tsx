@@ -27,7 +27,7 @@ async function inlineImages(root: HTMLElement): Promise<void> {
   );
 }
 
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
@@ -381,7 +381,7 @@ export function JobOrderPage() {
 
   // ── Upsert mutation ──
   const upsert = useMutation({
-    mutationFn: async (status: JobOrderStatus) =>
+    mutationFn: async ({ status, doc }: { status: JobOrderStatus; doc?: DocType }) =>
       (
         await api.post<JobOrder>('/job-orders', {
           jobId,
@@ -396,7 +396,7 @@ export function JobOrderPage() {
           cameraCount: joType === 'CCTV' && cameraCount > 0 ? cameraCount : undefined,
           cameraRate: joType === 'CCTV' ? cameraRate : undefined,
           laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
-          docType,
+          docType: doc ?? docType,
           items: items.map(({ name, description, quantity, unitPrice, inventoryItemId }) => ({
             name,
             description: description || undefined,
@@ -502,18 +502,25 @@ export function JobOrderPage() {
   const handlePrint = async () => {
     if (!canSave) return;
     // Save first so the print reflects the latest state
-    await upsert.mutateAsync(jo?.status ?? 'DRAFT');
+    await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
     window.print();
   };
 
   const [isDownloading, setIsDownloading] = useState(false);
-  const [docType, setDocType] = useState<DocType>('JOB_ORDER');
+  const [searchParams] = useSearchParams();
+  const docParam = searchParams.get('doc');
+  // New JOs inherit the document type from the list page's active tab.
+  const [docType, setDocType] = useState<DocType>(
+    DOC_TYPES.some((d) => d.value === docParam) ? (docParam as DocType) : 'JOB_ORDER',
+  );
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<DocType>('JOB_ORDER');
 
   const handleDownload = async () => {
     const element = document.getElementById('job-order-print');
     if (!element) return;
     if (canSave) {
-      await upsert.mutateAsync(jo?.status ?? 'DRAFT');
+      await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
     }
     setIsDownloading(true);
     const filename = `${DOC_META[docType].filePrefix}-${jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}.pdf`;
@@ -625,27 +632,26 @@ export function JobOrderPage() {
               ← Back to Project JO
             </button>
             <h1 style={{ margin: 0 }}>Project Job Order</h1>
-            <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+            <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               {jo ? `JO-${jo.id.slice(0, 8).toUpperCase()} · ${jo.status}` : 'New job order'}
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: 999, background: 'var(--accent-light)', color: 'var(--accent)' }}>
+                {DOC_META[docType].label}
+              </span>
+              <button
+                type="button"
+                onClick={() => { setMoveTarget(docType); setShowMoveDialog(true); }}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.78rem', padding: 0, textDecoration: 'underline' }}
+              >
+                Change
+              </button>
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <select
-              value={docType}
-              onChange={(e) => setDocType(e.target.value as DocType)}
-              title="Document type to print / download"
-              className="input"
-              style={{ fontSize: '0.8rem', padding: '0.45rem 0.5rem', maxWidth: 150 }}
-            >
-              {DOC_TYPES.map((d) => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
-            </select>
             <button
               type="button"
               className="btn btn-secondary"
               disabled={!canSave || upsert.isPending}
-              onClick={() => upsert.mutate(jo?.status ?? 'DRAFT')}
+              onClick={() => upsert.mutate({ status: jo?.status ?? 'DRAFT' })}
             >
               {upsert.isPending ? 'Saving…' : 'Save Draft'}
             </button>
@@ -653,7 +659,7 @@ export function JobOrderPage() {
               type="button"
               className="btn btn-primary"
               disabled={!canSave || upsert.isPending}
-              onClick={() => upsert.mutate('FINALIZED')}
+              onClick={() => upsert.mutate({ status: 'FINALIZED' })}
             >
               Finalize
             </button>
@@ -1099,6 +1105,50 @@ export function JobOrderPage() {
           </aside>
         </div>
       </div>
+
+      {/* ── Change Document Type Dialog ── */}
+      <Dialog
+        isOpen={showMoveDialog}
+        onClose={() => setShowMoveDialog(false)}
+        title="Change Document Type"
+        maxWidth={380}
+      >
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 0 }}>
+          Moves this record to the selected tab on the Project JO list and sets the print letterhead.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          {DOC_TYPES.map((d) => (
+            <label key={d.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.65rem', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: moveTarget === d.value ? 'var(--accent-light)' : 'transparent' }}>
+              <input
+                type="radio"
+                name="move-doc-type"
+                checked={moveTarget === d.value}
+                onChange={() => setMoveTarget(d.value)}
+              />
+              <span style={{ fontSize: '0.9rem', fontWeight: moveTarget === d.value ? 600 : 400 }}>{d.label}</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ flex: 1 }}
+            disabled={upsert.isPending}
+            onClick={() => {
+              setDocType(moveTarget);
+              setShowMoveDialog(false);
+              // Persist immediately for saved orders; new orders persist on first save.
+              if (jo && canSave) upsert.mutate({ status: jo.status, doc: moveTarget });
+            }}
+          >
+            {upsert.isPending ? 'Saving…' : 'Apply'}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowMoveDialog(false)}>
+            Cancel
+          </button>
+        </div>
+      </Dialog>
 
       {/* ── New Client Dialog ── */}
       <Dialog
