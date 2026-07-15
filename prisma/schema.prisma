@@ -109,6 +109,12 @@ enum JobOrderStatus {
   CANCELLED
 }
 
+enum JobOrderType {
+  SOFTWARE
+  CCTV
+  SIGNAGE
+}
+
 enum DevProjectStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -389,6 +395,10 @@ model JobOrder {
   discountType DiscountType   @default(FIXED) @map("discount_type")
   remarks      String?        @db.Text
   status       JobOrderStatus @default(DRAFT)
+  type         JobOrderType   @default(SOFTWARE)
+  cameraCount  Int?           @map("camera_count")
+  cameraRate   Decimal?       @map("camera_rate") @db.Decimal(12, 2)
+  laborPct     Decimal?       @map("labor_pct") @db.Decimal(5, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
