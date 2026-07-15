@@ -42,6 +42,7 @@
     "class-validator": "^0.15.1",
     "firebase-admin": "^14.1.0",
     "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.11.5",
     "mysqldump": "^3.2.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

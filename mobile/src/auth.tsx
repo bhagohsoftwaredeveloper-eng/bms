@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import {
   api,
   clearTokens,
+  loadApiEnv,
   loadTokens,
   saveTokens,
   setUnauthorizedHandler,
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     (async () => {
       try {
+        await loadApiEnv();
         const { accessToken } = await loadTokens();
         const stored = await SecureStore.getItemAsync(USER_KEY);
         if (accessToken && stored) {
