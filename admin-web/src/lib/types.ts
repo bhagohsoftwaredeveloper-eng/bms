@@ -102,6 +102,18 @@ export interface DownloadLead {
   createdAt: string;
 }
 
+export interface FinaraLead {
+  id: number;
+  name: string;
+  company: string | null;
+  email: string;
+  phone: string | null;
+  message: string | null;
+  source: string | null;
+  status: 'NEW' | 'CONTACTED' | 'CLOSED';
+  createdAt: string;
+}
+
 export interface HardwareFingerprint {
   cpu: string;
   disk: string;
