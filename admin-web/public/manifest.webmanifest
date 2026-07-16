@@ -1,7 +1,7 @@
 {
-  "name": "Orbit Console",
-  "short_name": "Orbit",
-  "description": "Orbit Console — licenses, installations, earnings, KPIs.",
+  "name": "METRIQA",
+  "short_name": "METRIQA",
+  "description": "METRIQA — Installation · KPI · Incentives. Measure, monitor, reward.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#070b14",

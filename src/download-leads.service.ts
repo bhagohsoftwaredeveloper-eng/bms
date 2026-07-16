@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+﻿import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 
 interface PendingCode {
@@ -26,7 +26,7 @@ const MAX_ATTEMPTS = 5;
 
 /**
  * Email OTP for the landing-page lead form, delivered through Resend.
- * Codes are held in memory — they are short-lived, and losing them on a
+ * Codes are held in memory â€” they are short-lived, and losing them on a
  * server restart only means the visitor requests a fresh one.
  */
 @Injectable()
@@ -35,7 +35,7 @@ export class DownloadLeadsService {
 
   /**
    * Returns true when a code was emailed. Returns false when delivery is not
-   * possible (no API key, or the provider rejected the send — e.g. Resend
+   * possible (no API key, or the provider rejected the send â€” e.g. Resend
    * sandbox can only reach the account owner) so the caller can fall back to
    * accepting the lead with an unverified email.
    */
@@ -57,12 +57,12 @@ export class DownloadLeadsService {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM ?? 'Orbit Console <onboarding@resend.dev>',
+        from: process.env.RESEND_FROM ?? 'METRIQA <onboarding@resend.dev>',
         to: [email],
-        subject: `${code} is your Orbit Console verification code`,
+        subject: `${code} is your METRIQA verification code`,
         html: [
           '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:420px;margin:0 auto;padding:24px">',
-          '<h2 style="margin:0 0 8px">Orbit Console</h2>',
+          '<h2 style="margin:0 0 8px">METRIQA</h2>',
           '<p style="color:#555">Use this code to verify your email on the download form:</p>',
           `<div style="font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 0">${code}</div>`,
           '<p style="color:#888;font-size:13px">The code expires in 10 minutes. If you did not request it, you can ignore this email.</p>',
@@ -87,11 +87,11 @@ export class DownloadLeadsService {
     const entry = this.pending.get(email);
     if (!entry || Date.now() > entry.expiresAt) {
       this.pending.delete(email);
-      throw new BadRequestException('Verification code expired — request a new one.');
+      throw new BadRequestException('Verification code expired â€” request a new one.');
     }
     if (entry.attempts >= MAX_ATTEMPTS) {
       this.pending.delete(email);
-      throw new BadRequestException('Too many attempts — request a new code.');
+      throw new BadRequestException('Too many attempts â€” request a new code.');
     }
     entry.attempts += 1;
     if (entry.code !== code.trim()) {
@@ -100,9 +100,9 @@ export class DownloadLeadsService {
     this.pending.delete(email);
   }
 
-  // ── Finara Leads: external ERP integration ─────────────────────────────────
+  // â”€â”€ Finara Leads: external ERP integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  /** Live proxy to the Finara ERP leads export — nothing is stored locally. */
+  /** Live proxy to the Finara ERP leads export â€” nothing is stored locally. */
   async fetchFinaraLeads(): Promise<FinaraLead[]> {
     const apiKey = process.env.FINARA_API_KEY;
     if (!apiKey) throw new BadRequestException('FINARA_API_KEY is not configured on the server.');
@@ -122,7 +122,7 @@ export class DownloadLeadsService {
     // error, so guard against a non-JSON body.
     const contentType = res.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
-      throw new BadRequestException('Finara API did not return JSON — the API key may be invalid.');
+      throw new BadRequestException('Finara API did not return JSON â€” the API key may be invalid.');
     }
 
     const data = (await res.json()) as unknown;

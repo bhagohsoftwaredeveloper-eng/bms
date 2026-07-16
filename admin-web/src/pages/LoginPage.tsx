@@ -113,7 +113,7 @@ export function LoginPage() {
             animate={{ scale: 1, opacity: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 14, delay: 0.1 }}
           >
-            <img src="/ockpi.png" alt="OCKPI" className="lg-logo-img" />
+            <img src="/metriqa-logo.png" alt="METRIQA" className="lg-logo-img" />
           </motion.div>
           {/* <h1 className="lg-title">Orbit Console</h1>
           <p className="lg-sub">Everything orbits here</p> */}
@@ -194,7 +194,7 @@ export function LoginPage() {
         </motion.button>
 
         <motion.p className="lg-footer" variants={item}>
-          Beulah Monitoring System
+          METRIQA · Measure · Monitor · Reward
         </motion.p>
       </motion.form>
     </div>

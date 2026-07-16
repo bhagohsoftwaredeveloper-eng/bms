@@ -29,7 +29,7 @@ export function DevelopersPage() {
       <div className="lp-wrap">
         <header className="lp-topbar lp-rise lp-rise-1">
           <div className="lp-brand">
-            <img src="/favicon.svg" alt="Orbit Console logo" />
+            <img src="/metriqa-logo.png" alt="METRIQA logo" />
             <span className="lp-brand-name">
               ORBIT <em>CONSOLE</em>
             </span>
@@ -45,7 +45,7 @@ export function DevelopersPage() {
               <Code2 size={13} style={{ verticalAlign: '-2px' }} /> The Team
             </div>
             <h1 className="lp-h2" style={{ fontSize: 'clamp(1.9rem, 3.6vw, 2.6rem)' }}>
-              The developers behind <span className="lp-grad" style={{ background: 'linear-gradient(100deg, var(--lp-indigo) 10%, var(--lp-cyan) 90%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>Orbit Console</span>
+              The developers behind <span className="lp-grad" style={{ background: 'linear-gradient(100deg, var(--lp-indigo) 10%, var(--lp-cyan) 90%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>METRIQA</span>
             </h1>
             <p className="lp-sub">
               Built by <b style={{ color: 'var(--lp-cyan)' }}>Bhahoh Developer</b> — a small team
@@ -68,7 +68,7 @@ export function DevelopersPage() {
         <footer className="lp-footer">
           <div className="lp-footer-top">
             <div className="lp-brand">
-              <img src="/favicon.svg" alt="" />
+              <img src="/metriqa-logo.png" alt="" />
               <span className="lp-brand-name" style={{ fontSize: '0.85rem' }}>
                 ORBIT <em>CONSOLE</em>
               </span>

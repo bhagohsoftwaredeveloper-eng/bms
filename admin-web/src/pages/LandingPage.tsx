@@ -98,7 +98,7 @@ const FEATURES = [
 const CHART_BARS = [34, 52, 41, 66, 58, 79, 64, 88, 72, 95, 84, 100];
 
 /** The Beulah Field walkthrough shown inside the phone mockup, on loop. */
-const PHONE_STEPS = ['Login', 'Dashboard', 'KPI Points', 'Start Task', 'Earnings', 'Withdraw', 'Approved', 'Orbit Console'];
+const PHONE_STEPS = ['Login', 'Dashboard', 'KPI Points', 'Start Task', 'Earnings', 'Withdraw', 'Approved', 'METRIQA'];
 
 function useScrollReveal() {
   useEffect(() => {
@@ -126,7 +126,7 @@ function PhoneScreen({ step }: { step: number }) {
         <div className="lp-flip" key={step}>
           <div className="lp-scr-label">Sign In</div>
           <div className="lp-phone-logo" style={{ flex: 'none', margin: '1.2rem 0 1rem' }}>
-            <img src="/favicon.svg" alt="" />
+            <img src="/metriqa-logo.png" alt="" />
             <div className="lp-app-title" style={{ marginBottom: 0 }}>
               BEULAH <em>FIELD</em>
             </div>
@@ -235,10 +235,10 @@ function PhoneScreen({ step }: { step: number }) {
           </div>
         </div>
       );
-    default: // Orbit Console logo splash
+    default: // METRIQA logo splash
       return (
         <div className="lp-flip lp-phone-logo" key={step}>
-          <img src="/favicon.svg" alt="" />
+          <img src="/metriqa-logo.png" alt="" />
           <div className="lp-app-title" style={{ marginBottom: 0 }}>
             ORBIT <em>CONSOLE</em>
           </div>
@@ -430,7 +430,7 @@ export function LandingPage() {
       <div className="lp-wrap">
         <header className="lp-topbar lp-rise lp-rise-1">
           <div className="lp-brand">
-            <img src="/favicon.svg" alt="Orbit Console logo" />
+            <img src="/metriqa-logo.png" alt="METRIQA logo" />
             <span className="lp-brand-name">
               ORBIT <em>CONSOLE</em>
             </span>
@@ -448,7 +448,7 @@ export function LandingPage() {
               Mission control for your <span className="lp-grad">software business</span>
             </h1>
             <p className="lp-rise lp-rise-3">
-              Orbit Console runs the whole operation in one place — POS licenses, field installations
+              METRIQA runs the whole operation in one place — POS licenses, field installations
               with GPS-stamped proof, peso earnings, and KPI-driven incentives — synced live between
               the office console and the installer app.
             </p>
@@ -738,7 +738,7 @@ export function LandingPage() {
         <section className="lp-section">
           <div className="lp-reveal">
             <div className="lp-kicker">Proof of Service</div>
-            <h2 className="lp-h2">Installations, before and after Orbit Console</h2>
+            <h2 className="lp-h2">Installations, before and after METRIQA</h2>
             <p className="lp-sub">
               The difference isn&apos;t just software — it&apos;s a paper trail for every install, from
               schedule to peso payout.
@@ -756,7 +756,7 @@ export function LandingPage() {
               </ul>
             </div>
             <div className="lp-ba lp-ba-after lp-reveal" style={{ transitionDelay: '90ms' }}>
-              <h3>With Orbit Console</h3>
+              <h3>With METRIQA</h3>
               <ul>
                 <li><CheckCircle2 size={16} /> Every job scheduled, assigned, and visible on one live board.</li>
                 <li><CheckCircle2 size={16} /> Photo + client signature + GPS lock submitted from the field — undeniable proof.</li>
@@ -816,7 +816,7 @@ export function LandingPage() {
         {/* ── Downloads ── */}
         <section className="lp-section" id="download">
           <div className="lp-reveal">
-            <div className="lp-kicker">Get Orbit Console</div>
+            <div className="lp-kicker">Get METRIQA</div>
             <h2 className="lp-h2">Three ways in — all pre-connected</h2>
             <p className="lp-sub">
               Every install points at the Beulah server out of the box. Nothing to configure.
@@ -848,7 +848,7 @@ export function LandingPage() {
               {showInstallHelp && !canPrompt && (
                 <div className="lp-install-help">
                   In Chrome or Edge: open the ⋮ menu → <b>Cast, save and share</b> →{' '}
-                  <b>Install Orbit Console</b>. (Already installed? It&apos;s in your Start menu.)
+                  <b>Install METRIQA</b>. (Already installed? It&apos;s in your Start menu.)
                 </div>
               )}
               <span className="lp-dl-note">CHROME / EDGE · WINDOWS · MAC</span>
@@ -870,7 +870,7 @@ export function LandingPage() {
         <footer className="lp-footer">
           <div className="lp-footer-top">
             <div className="lp-brand">
-              <img src="/favicon.svg" alt="" />
+              <img src="/metriqa-logo.png" alt="" />
               <span className="lp-brand-name" style={{ fontSize: '0.85rem' }}>
                 ORBIT <em>CONSOLE</em>
               </span>
@@ -911,14 +911,14 @@ export function LandingPage() {
                   </>
                 ) : (
                   <>
-                    <p className="lp-modal-sub">Click below to install Orbit Console on this computer.</p>
+                    <p className="lp-modal-sub">Click below to install METRIQA on this computer.</p>
                     <button type="button" className="lp-btn lp-btn-cyan" onClick={installDesktop}>
                       <Monitor size={16} /> Install on Desktop
                     </button>
                     {showInstallHelp && !canPrompt && (
                       <div className="lp-install-help" style={{ textAlign: 'left' }}>
                         In Chrome or Edge: open the ⋮ menu → <b>Cast, save and share</b> →{' '}
-                        <b>Install Orbit Console</b>.
+                        <b>Install METRIQA</b>.
                       </div>
                     )}
                   </>
