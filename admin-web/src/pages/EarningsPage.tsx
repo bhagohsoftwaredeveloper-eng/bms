@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 import { useAuthStore } from '../lib/auth-store';
 import type { AuthenticatedUser, Earning, EarningType } from '../lib/types';
 
@@ -208,7 +209,16 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
   hasData: boolean;
   onSetStatus: (id: string, action: 'approve' | 'paid') => void;
 }) {
-  const pg = usePagination(earningsWithBalance);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const filtered = earningsWithBalance.filter((earning) =>
+    matchesSearch(search, earning.user?.fullName, earning.job?.client?.businessName, earning.type)
+    && (!status || earning.status === status)
+    && inDateRange(earning.createdAt, from, to),
+  );
+  const pg = usePagination(filtered);
   return (
     <div className="card">
         {isLoading && <p>Loading earnings…</p>}
@@ -216,6 +226,23 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
         {hasData && earningsWithBalance.length === 0 && <p>No earnings recorded yet.</p>}
         {earningsWithBalance.length > 0 && (
           <>
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder={isAdmin ? 'Search team member, client, type…' : 'Search client, type…'}
+            selects={[{
+              value: status,
+              onChange: setStatus,
+              ariaLabel: 'Filter by status',
+              options: [
+                { value: '', label: 'All statuses' },
+                { value: 'PENDING', label: 'Pending' },
+                { value: 'APPROVED', label: 'Approved' },
+                { value: 'PAID', label: 'Paid' },
+              ],
+            }]}
+            dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+          />
           <table>
             <thead>
               <tr>
@@ -266,6 +293,9 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
                   )}
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={isAdmin ? 8 : 6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
             </tbody>
           </table>
           <Pagination page={pg.page} pageSize={pg.pageSize} totalPages={pg.totalPages} total={pg.total} start={pg.start} onPage={pg.changePage} onPageSize={pg.changePageSize} />

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch } from '../components/TableToolbar';
 import type { LicenseType, SoftwareProduct } from '../lib/types';
 
 const LICENSE_TYPES: LicenseType[] = ['SUBSCRIPTION_MONTHLY', 'SUBSCRIPTION_ANNUAL', 'LIFETIME'];
@@ -144,7 +145,9 @@ export function ProductsPage() {
 }
 
 function ProductsTable({ data, isLoading, isError }: { data: SoftwareProduct[]; isLoading: boolean; isError: boolean }) {
-  const pg = usePagination(data);
+  const [search, setSearch] = useState('');
+  const filtered = data.filter((p) => matchesSearch(search, p.productName, p.version, p.licenseType.replace(/_/g, ' ')));
+  const pg = usePagination(filtered);
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
@@ -153,6 +156,8 @@ function ProductsTable({ data, isLoading, isError }: { data: SoftwareProduct[]; 
           {isError && <p className="error-text">Failed to load products.</p>}
           {!isLoading && data.length === 0 && <p>No products yet — add the first one above.</p>}
           {data.length > 0 && (
+            <>
+            <TableToolbar search={search} onSearch={setSearch} placeholder="Search name, version, license type…" />
             <table>
               <thead>
                 <tr>
@@ -173,8 +178,12 @@ function ProductsTable({ data, isLoading, isError }: { data: SoftwareProduct[]; 
                     <td>{product.maintenanceFee ? `₱${Number(product.maintenanceFee).toLocaleString()}` : '—'}</td>
                   </tr>
                 ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                )}
               </tbody>
             </table>
+            </>
           )}
         </div>
       </div>

@@ -5,6 +5,7 @@ import { api, fileUrl } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 import { useAuthStore } from '../lib/auth-store';
 import type { Withdrawal, WithdrawalMethod } from '../lib/types';
 
@@ -502,7 +503,16 @@ function WithdrawalsTable({
   onRelease: (withdrawal: Withdrawal) => void;
   onViewProof: (url: string) => void;
 }) {
-  const pg = usePagination(data);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const filtered = data.filter((w) =>
+    matchesSearch(search, w.user?.fullName, w.accountName, w.accountNumber, w.method.replace(/_/g, ' '))
+    && (!status || w.status === status)
+    && inDateRange(w.createdAt, from, to),
+  );
+  const pg = usePagination(filtered);
 
   return (
     <div className="card">
@@ -511,6 +521,24 @@ function WithdrawalsTable({
       {!isLoading && data.length === 0 && <p>No withdrawal requests yet.</p>}
       {data.length > 0 && (
         <>
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder={isAdmin ? 'Search requester, account, method…' : 'Search account, method…'}
+            selects={[{
+              value: status,
+              onChange: setStatus,
+              ariaLabel: 'Filter by status',
+              options: [
+                { value: '', label: 'All statuses' },
+                { value: 'PENDING', label: 'Pending' },
+                { value: 'APPROVED', label: 'Approved' },
+                { value: 'REJECTED', label: 'Rejected' },
+                { value: 'RELEASED', label: 'Released' },
+              ],
+            }]}
+            dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+          />
           <table>
             <thead>
               <tr>
@@ -604,6 +632,9 @@ function WithdrawalsTable({
                   )}
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={isAdmin ? 7 : 5} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
             </tbody>
           </table>
           <Pagination

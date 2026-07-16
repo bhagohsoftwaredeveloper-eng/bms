@@ -5,10 +5,12 @@ import { api, fileUrl } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 import { useAuthStore } from '../lib/auth-store';
 import type { AuthenticatedUser, Client, Job, JobStatus } from '../lib/types';
 
 const EMPTY_FORM = { clientId: '', installerId: '', scheduleDate: '', remarks: '' };
+const JOB_STATUSES: JobStatus[] = ['ASSIGNED', 'ON_GOING', 'WAITING_ACTIVATION', 'COMPLETED', 'CANCELLED'];
 
 function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const queryClient = useQueryClient();
@@ -214,7 +216,16 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onAssign
   data: Job[]; isLoading: boolean; isError: boolean; isReadOnly?: boolean;
   onAssign: (id: string, installerId: string | null) => void;
 }) {
-  const pg = usePagination(data);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const filtered = data.filter((job) =>
+    matchesSearch(search, job.client?.businessName, job.installer?.fullName, job.remarks)
+    && (!status || job.jobStatus === status)
+    && inDateRange(job.scheduleDate, from, to),
+  );
+  const pg = usePagination(filtered);
   return (
       <div className="card">
         {isLoading && <p>Loading installations…</p>}
@@ -222,6 +233,18 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onAssign
         {!isLoading && data.length === 0 && <p>No installations scheduled yet.</p>}
         {data.length > 0 && (
           <>
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder="Search client, installer, remarks…"
+            selects={[{
+              value: status,
+              onChange: setStatus,
+              ariaLabel: 'Filter by status',
+              options: [{ value: '', label: 'All statuses' }, ...JOB_STATUSES.map((s) => ({ value: s, label: s.replace('_', ' ') }))],
+            }]}
+            dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+          />
           <table>
             <thead>
               <tr>
@@ -254,6 +277,9 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onAssign
                   )}
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={isReadOnly ? 5 : 6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
             </tbody>
           </table>
           <Pagination page={pg.page} pageSize={pg.pageSize} totalPages={pg.totalPages} total={pg.total} start={pg.start} onPage={pg.changePage} onPageSize={pg.changePageSize} />
@@ -628,7 +654,16 @@ function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenPr
   onOpenProof: (id: string) => void;
   onView: (id: string) => void;
 }) {
-  const pg = usePagination(data);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const filtered = data.filter((job) =>
+    matchesSearch(search, job.client?.businessName, job.remarks)
+    && (!status || job.jobStatus === status)
+    && inDateRange(job.scheduleDate, from, to),
+  );
+  const pg = usePagination(filtered);
   return (
       <div className="card" style={{ marginTop: '1.5rem' }}>
         {isLoading && <p>Loading your jobs…</p>}
@@ -636,6 +671,18 @@ function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenPr
         {!isLoading && data.length === 0 && <p>No jobs assigned to you yet.</p>}
         {data.length > 0 && (
           <>
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder="Search client, remarks…"
+            selects={[{
+              value: status,
+              onChange: setStatus,
+              ariaLabel: 'Filter by status',
+              options: [{ value: '', label: 'All statuses' }, ...JOB_STATUSES.map((s) => ({ value: s, label: s.replace('_', ' ') }))],
+            }]}
+            dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+          />
           <table>
             <thead>
               <tr>
@@ -682,6 +729,9 @@ function InstallerJobsTable({ data, isLoading, isError, onUpdateStatus, onOpenPr
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
             </tbody>
           </table>
           <Pagination page={pg.page} pageSize={pg.pageSize} totalPages={pg.totalPages} total={pg.total} start={pg.start} onPage={pg.changePage} onPageSize={pg.changePageSize} />

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { InventoryItem, StockMovement, StockMovementReason } from '../lib/types';
 import { Dialog } from '../components/Dialog';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 
 const REASON_LABEL: Record<StockMovementReason, string> = {
   MANUAL_ADJUST: 'Manual adjust',
@@ -153,6 +154,19 @@ export function InventoryPage() {
   const set = <K extends keyof ItemForm>(key: K, value: ItemForm[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  const [itemSearch, setItemSearch] = useState('');
+  const filteredItems = (itemsQuery.data ?? []).filter((item) =>
+    matchesSearch(itemSearch, item.name, item.description, item.barcode),
+  );
+
+  const [movementReason, setMovementReason] = useState('');
+  const [movementFrom, setMovementFrom] = useState('');
+  const [movementTo, setMovementTo] = useState('');
+  const filteredMovements = (movementsQuery.data ?? []).filter((m) =>
+    (!movementReason || m.reason === movementReason)
+    && inDateRange(m.createdAt, movementFrom, movementTo),
+  );
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -168,6 +182,11 @@ export function InventoryPage() {
 
       {itemsQuery.data && itemsQuery.data.length > 0 && (
         <div style={{ overflowX: 'auto' }} className="card" >
+          <TableToolbar
+            search={itemSearch}
+            onSearch={setItemSearch}
+            placeholder="Search item, description, barcode…"
+          />
           <table>
             <thead>
               <tr>
@@ -180,7 +199,10 @@ export function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {itemsQuery.data.map((item) => (
+              {filteredItems.length === 0 && (
+                <tr><td colSpan={6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
+              {filteredItems.map((item) => (
                 <tr key={item.id} style={{ opacity: item.active ? 1 : 0.55 }}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{item.name}</div>
@@ -339,6 +361,18 @@ export function InventoryPage() {
         {movementsQuery.data?.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No stock movements yet.</p>}
         {movementsQuery.data && movementsQuery.data.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
+            <TableToolbar
+              selects={[{
+                value: movementReason,
+                onChange: setMovementReason,
+                ariaLabel: 'Filter by reason',
+                options: [
+                  { value: '', label: 'All reasons' },
+                  ...Object.entries(REASON_LABEL).map(([value, label]) => ({ value, label })),
+                ],
+              }]}
+              dateRange={{ from: movementFrom, to: movementTo, onFrom: setMovementFrom, onTo: setMovementTo }}
+            />
             <table>
               <thead>
                 <tr>
@@ -349,7 +383,10 @@ export function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {movementsQuery.data.map((m) => (
+                {filteredMovements.length === 0 && (
+                  <tr><td colSpan={4} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                )}
+                {filteredMovements.map((m) => (
                   <tr key={m.id}>
                     <td style={{ fontSize: '0.8rem' }}>{new Date(m.createdAt).toLocaleString()}</td>
                     <td style={{ fontSize: '0.82rem' }}>{REASON_LABEL[m.reason]}</td>

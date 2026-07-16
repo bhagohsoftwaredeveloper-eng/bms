@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 import type { AuditLog } from '../lib/types';
 
 export function AuditLogsPage() {
@@ -9,7 +11,14 @@ export function AuditLogsPage() {
     queryFn: async () => (await api.get<AuditLog[]>('/audit-logs')).data,
   });
 
-  const pg = usePagination(auditLogsQuery.data ?? [], 20);
+  const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const filtered = (auditLogsQuery.data ?? []).filter((log) =>
+    matchesSearch(search, log.user?.fullName, log.action, log.ipAddress, log.device)
+    && inDateRange(log.createdAt, from, to),
+  );
+  const pg = usePagination(filtered, 20);
 
   return (
     <div>
@@ -24,6 +33,12 @@ export function AuditLogsPage() {
         {auditLogsQuery.data && auditLogsQuery.data.length === 0 && <p>No activity recorded yet.</p>}
         {auditLogsQuery.data && auditLogsQuery.data.length > 0 && (
           <>
+            <TableToolbar
+              search={search}
+              onSearch={setSearch}
+              placeholder="Search user, action, IP, device…"
+              dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+            />
             <table>
               <thead>
                 <tr>
@@ -44,6 +59,9 @@ export function AuditLogsPage() {
                     <td>{log.device ?? '—'}</td>
                   </tr>
                 ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                )}
               </tbody>
             </table>
             <Pagination page={pg.page} pageSize={pg.pageSize} totalPages={pg.totalPages} total={pg.total} start={pg.start} onPage={pg.changePage} onPageSize={pg.changePageSize} />

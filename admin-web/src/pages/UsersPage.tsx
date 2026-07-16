@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch } from '../components/TableToolbar';
 import type { TeamMember, UserRole } from '../lib/types';
 
 const ALL_ROLES: UserRole[] = [
@@ -337,7 +338,13 @@ function UsersTable({ data, isLoading, isError, onEdit, onToggleActive, toggleIs
   onToggleActive: (u: TeamMember) => void;
   toggleIsPending: boolean;
 }) {
-  const pg = usePagination(data);
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState('');
+  const filtered = data.filter((u) =>
+    matchesSearch(search, u.fullName, u.email, u.phone)
+    && (!role || u.role === role || (u.additionalRoles ?? []).some((ra) => ra.role === role)),
+  );
+  const pg = usePagination(filtered);
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
@@ -346,6 +353,18 @@ function UsersTable({ data, isLoading, isError, onEdit, onToggleActive, toggleIs
           {isError && <p className="error-text">Failed to load the team.</p>}
           {!isLoading && data.length === 0 && <p>No team members yet.</p>}
           {data.length > 0 && (
+            <>
+            <TableToolbar
+              search={search}
+              onSearch={setSearch}
+              placeholder="Search name, email, phone…"
+              selects={[{
+                value: role,
+                onChange: setRole,
+                ariaLabel: 'Filter by role',
+                options: [{ value: '', label: 'All roles' }, ...ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))],
+              }]}
+            />
             <table>
               <thead>
                 <tr>
@@ -384,8 +403,12 @@ function UsersTable({ data, isLoading, isError, onEdit, onToggleActive, toggleIs
                     </td>
                   </tr>
                 ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={7} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                )}
               </tbody>
             </table>
+            </>
           )}
         </div>
       </div>

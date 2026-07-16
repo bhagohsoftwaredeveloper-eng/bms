@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BadgeCheck, Smartphone, Monitor } from 'lucide-react';
 import { api } from '../lib/api';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
 import type { DownloadLead, FinaraLead } from '../lib/types';
 
 function TabButton({ label, active, count, onClick }: { label: string; active: boolean; count?: number; onClick: () => void }) {
@@ -37,7 +38,14 @@ function TabButton({ label, active, count, onClick }: { label: string; active: b
 // ── Download Leads Tab (our landing page) ──────────────────────────────────
 
 function DownloadLeadsTab({ leads, isLoading, isError }: { leads: DownloadLead[]; isLoading: boolean; isError: boolean }) {
-  const pg = usePagination(leads);
+  const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const filtered = leads.filter((lead) =>
+    matchesSearch(search, lead.companyName, lead.contactPerson, lead.contactNo, lead.email)
+    && inDateRange(lead.createdAt, from, to),
+  );
+  const pg = usePagination(filtered);
 
   return (
     <div className="card">
@@ -46,6 +54,12 @@ function DownloadLeadsTab({ leads, isLoading, isError }: { leads: DownloadLead[]
       {!isLoading && !isError && leads.length === 0 && <p>No leads captured yet.</p>}
       {leads.length > 0 && (
         <>
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder="Search company, contact, email…"
+            dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+          />
           <table>
             <thead>
               <tr>
@@ -93,6 +107,9 @@ function DownloadLeadsTab({ leads, isLoading, isError }: { leads: DownloadLead[]
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
             </tbody>
           </table>
           <Pagination
@@ -138,9 +155,16 @@ function FinaraStatusBadge({ status }: { status: FinaraLead['status'] }) {
 }
 
 function FinaraLeadsTab({ leads, isLoading, error }: { leads: FinaraLead[]; isLoading: boolean; error: unknown }) {
+  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
-  const filtered = statusFilter ? leads.filter((l) => l.status === statusFilter) : leads;
+  const filtered = leads.filter((l) =>
+    matchesSearch(search, l.name, l.company, l.email, l.phone, l.message, l.source)
+    && (!statusFilter || l.status === statusFilter)
+    && inDateRange(l.createdAt, from, to),
+  );
   const pg = usePagination(filtered);
 
   const errorMessage =
@@ -149,14 +173,23 @@ function FinaraLeadsTab({ leads, isLoading, error }: { leads: FinaraLead[]; isLo
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 'auto' }}>
-          <option value="">All statuses</option>
-          <option value="NEW">New</option>
-          <option value="CONTACTED">Contacted</option>
-          <option value="CLOSED">Closed</option>
-        </select>
-      </div>
+      <TableToolbar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search name, company, email, phone…"
+        selects={[{
+          value: statusFilter,
+          onChange: setStatusFilter,
+          ariaLabel: 'Filter by status',
+          options: [
+            { value: '', label: 'All statuses' },
+            { value: 'NEW', label: 'New' },
+            { value: 'CONTACTED', label: 'Contacted' },
+            { value: 'CLOSED', label: 'Closed' },
+          ],
+        }]}
+        dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+      />
 
       {isLoading && <p>Loading Finara leads…</p>}
       {!!error && <p className="error-text">{errorMessage}</p>}

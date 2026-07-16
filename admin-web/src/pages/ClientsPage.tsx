@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
+import { TableToolbar, matchesSearch } from '../components/TableToolbar';
 import type { Client, ClientStatus, ClientType } from '../lib/types';
 
 const CLIENT_STATUSES: ClientStatus[] = ['ACTIVE', 'EXPIRED', 'SUSPENDED', 'CANCELLED'];
@@ -336,9 +337,18 @@ function ClientsTable({ data, onEdit, onDelete, deleteIsPending }: {
   onDelete: (id: string, name: string) => void;
   deleteIsPending: boolean;
 }) {
-  const pg = usePagination(data);
+  const [search, setSearch] = useState('');
+  const filtered = data.filter((c) =>
+    matchesSearch(search, c.clientCode, c.businessName, c.ownerName, c.contactNo, c.address),
+  );
+  const pg = usePagination(filtered);
   return (
     <>
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder="Search code, business, owner, contact, address…"
+          />
           <table>
             <thead>
               <tr>
@@ -372,6 +382,9 @@ function ClientsTable({ data, onEdit, onDelete, deleteIsPending }: {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+              )}
             </tbody>
           </table>
           <Pagination page={pg.page} pageSize={pg.pageSize} totalPages={pg.totalPages} total={pg.total} start={pg.start} onPage={pg.changePage} onPageSize={pg.changePageSize} />

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { ChartCard } from '../components/ChartCard';
 import { SimpleBarChart } from '../components/SimpleChart';
+import { matchesSearch } from '../components/TableToolbar';
 import type { Client, ClientPaymentHistory, CollectionsSummary, OutstandingRow } from '../lib/types';
 
 const peso = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
@@ -44,6 +45,7 @@ export function FinancialReportsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [clientId, setClientId] = useState('');
+  const [outstandingSearch, setOutstandingSearch] = useState('');
 
   const collectionsQuery = useQuery({
     queryKey: ['financial-collections', from, to],
@@ -74,6 +76,9 @@ export function FinancialReportsPage() {
   const paymentCount = summary?.byMethod.reduce((s, m) => s + m.count, 0) ?? 0;
   const outstandingRows = outstandingQuery.data ?? [];
   const totalOutstanding = outstandingRows.reduce((s, r) => s + r.balance, 0);
+  const visibleOutstanding = outstandingRows.filter((r) =>
+    matchesSearch(outstandingSearch, r.clientName, r.jobOrderId.slice(0, 8)),
+  );
 
   const history = clientHistoryQuery.data;
   const clientTotalPaid = history?.payments.reduce((s, p) => s + Number(p.amount), 0) ?? 0;
@@ -216,7 +221,15 @@ export function FinancialReportsPage() {
           </div>
 
           <ChartCard title="Outstanding Balances" subtitle="Job Orders not yet fully paid">
-            <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                className="input"
+                type="text"
+                value={outstandingSearch}
+                onChange={(e) => setOutstandingSearch(e.target.value)}
+                placeholder="Search client, JO #…"
+                style={{ flex: '1 1 220px', maxWidth: 340, width: 'auto' }}
+              />
               <button type="button" className="btn btn-secondary" onClick={() => downloadCsv('/reports/financial/export?type=outstanding', 'outstanding.csv')}>
                 Export CSV
               </button>
@@ -233,7 +246,7 @@ export function FinancialReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {outstandingRows.map((row) => (
+                {visibleOutstanding.map((row) => (
                   <tr key={row.jobOrderId} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '0.3rem 0' }}>{row.clientName}</td>
                     <td>JO-{row.jobOrderId.slice(0, 8).toUpperCase()}</td>
@@ -243,17 +256,19 @@ export function FinancialReportsPage() {
                     <td>{row.lastPaymentAt ? new Date(row.lastPaymentAt).toLocaleDateString() : '—'}</td>
                   </tr>
                 ))}
-                {outstandingRows.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No outstanding balances.</td></tr>
+                {visibleOutstanding.length === 0 && (
+                  <tr><td colSpan={6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>
+                    {outstandingRows.length === 0 ? 'No outstanding balances.' : 'No matches.'}
+                  </td></tr>
                 )}
               </tbody>
-              {outstandingRows.length > 0 && (
+              {visibleOutstanding.length > 0 && (
                 <tfoot>
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={{ padding: '0.4rem 0' }} colSpan={2}>Total ({outstandingRows.length})</td>
-                    <td style={tdRight}>{peso(outstandingRows.reduce((s, r) => s + r.grandTotal, 0))}</td>
-                    <td style={tdRight}>{peso(outstandingRows.reduce((s, r) => s + r.totalPaid, 0))}</td>
-                    <td style={{ ...tdRight, color: 'var(--danger)' }}>{peso(totalOutstanding)}</td>
+                    <td style={{ padding: '0.4rem 0' }} colSpan={2}>Total ({visibleOutstanding.length})</td>
+                    <td style={tdRight}>{peso(visibleOutstanding.reduce((s, r) => s + r.grandTotal, 0))}</td>
+                    <td style={tdRight}>{peso(visibleOutstanding.reduce((s, r) => s + r.totalPaid, 0))}</td>
+                    <td style={{ ...tdRight, color: 'var(--danger)' }}>{peso(visibleOutstanding.reduce((s, r) => s + r.balance, 0))}</td>
                     <td />
                   </tr>
                 </tfoot>

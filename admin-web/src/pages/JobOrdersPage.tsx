@@ -5,13 +5,16 @@ import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
-import type { DocumentType, Job, JobOrder, JobOrderType } from '../lib/types';
+import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
+import type { DocumentType, Job, JobOrder, JobOrderStatus, JobOrderType } from '../lib/types';
 
 const JO_TYPE_LABELS: Record<JobOrderType, string> = {
   SOFTWARE: 'Software',
   CCTV: 'CCTV',
   SIGNAGE: 'Signage',
 };
+
+const JO_STATUSES: JobOrderStatus[] = ['DRAFT', 'FINALIZED', 'ON_GOING', 'COMPLETED', 'CANCELLED'];
 
 const DOC_TABS: { value: DocumentType; label: string }[] = [
   { value: 'JOB_ORDER', label: 'Job Order' },
@@ -59,8 +62,17 @@ export function JobOrdersPage() {
   });
 
   const [activeDocTab, setActiveDocTab] = useState<DocumentType>('JOB_ORDER');
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const allOrders = jobOrdersQuery.data ?? [];
-  const filteredOrders = allOrders.filter((jo) => (jo.docType ?? 'JOB_ORDER') === activeDocTab);
+  const filteredOrders = allOrders.filter((jo) =>
+    (jo.docType ?? 'JOB_ORDER') === activeDocTab
+    && matchesSearch(search, jo.id.slice(0, 8), jo.client?.businessName, jo.product?.productName)
+    && (!status || jo.status === status)
+    && inDateRange(jo.createdAt, from, to),
+  );
   const pg = usePagination(filteredOrders);
 
   const jobsQuery = useQuery({
@@ -170,8 +182,22 @@ export function JobOrdersPage() {
       <div className="card">
         {jobOrdersQuery.isLoading && <p>Loading job orders…</p>}
         {jobOrdersQuery.isError && <p className="error-text">Failed to load job orders.</p>}
+        {jobOrdersQuery.data && (
+          <TableToolbar
+            search={search}
+            onSearch={setSearch}
+            placeholder="Search JO #, client, product…"
+            selects={[{
+              value: status,
+              onChange: setStatus,
+              ariaLabel: 'Filter by status',
+              options: [{ value: '', label: 'All statuses' }, ...JO_STATUSES.map((s) => ({ value: s, label: s }))],
+            }]}
+            dateRange={{ from, to, onFrom: setFrom, onTo: setTo }}
+          />
+        )}
         {jobOrdersQuery.data && filteredOrders.length === 0 && (
-          <p>No {DOC_TABS.find((t) => t.value === activeDocTab)?.label.toLowerCase()} records yet.</p>
+          <p>No {DOC_TABS.find((t) => t.value === activeDocTab)?.label.toLowerCase()} records match.</p>
         )}
         {jobOrdersQuery.data && filteredOrders.length > 0 && (
           <>
@@ -192,10 +218,11 @@ export function JobOrdersPage() {
             <tbody>
               {pg.paginated.map((jo) => {
                 const materialsTotal = (jo.items || []).reduce((s, i) => s + i.quantity * Number(i.unitPrice), 0);
+                const subtotal = Number(jo.salePrice) + materialsTotal;
                 const discountAmt = jo.discountType === 'PERCENTAGE'
-                  ? (Number(jo.salePrice) * Number(jo.discount)) / 100
+                  ? (subtotal * Number(jo.discount)) / 100
                   : Number(jo.discount);
-                const grandTotal = Number(jo.salePrice) - discountAmt + materialsTotal;
+                const grandTotal = Math.max(0, subtotal - discountAmt);
 
                 return (
                   <tr key={jo.id}>
