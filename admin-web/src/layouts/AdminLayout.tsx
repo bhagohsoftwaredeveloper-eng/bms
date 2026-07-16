@@ -61,7 +61,7 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/', label: 'Dashboard', end: true },
     { to: '/clients', label: 'Clients' },
     { section: true, label: 'Dev' },
-    { to: '/job-orders/software', label: 'Project JO', indent: true },
+    { to: '/job-orders/software', label: 'Project Job Orders', indent: true },
     { to: '/dev-projects', label: 'Dev Projects', indent: true },
     { to: '/products', label: 'Software Products', indent: true },
     { to: '/licenses', label: 'Licenses', indent: true },
