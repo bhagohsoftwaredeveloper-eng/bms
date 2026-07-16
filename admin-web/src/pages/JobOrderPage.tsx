@@ -1104,7 +1104,7 @@ export function JobOrderPage() {
           <aside style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="card">
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Order Summary</h2>
-              <table style={{ fontSize: '0.9rem' }}>
+              <table style={{ fontSize: '0.9rem', tableLayout: 'fixed' }}>
                 <tbody>
                   <tr>
                     <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
