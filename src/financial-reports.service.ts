@@ -9,6 +9,17 @@ export interface CollectionsSummary {
   to: string | null;
   totalCollected: number;
   byMethod: { method: PaymentMethod; total: number; count: number }[];
+  /** Collections per calendar month, last 6 months incl. current, oldest first. */
+  byMonth: { month: string; total: number }[];
+  /** 10 newest non-voided payments within the from/to filter. */
+  recentPayments: {
+    id: string;
+    jobOrderId: string;
+    amount: number;
+    method: PaymentMethod;
+    paidAt: string;
+    clientName: string;
+  }[];
 }
 
 export interface OutstandingRow {
@@ -26,19 +37,29 @@ export class FinancialReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async collectionsSummary(from?: string, to?: string): Promise<CollectionsSummary> {
-    const payments = await this.prisma.payment.findMany({
-      where: {
-        voidedAt: null,
-        ...(from || to
-          ? {
-              paidAt: {
-                ...(from ? { gte: new Date(from) } : {}),
-                ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
-              },
-            }
-          : {}),
-      },
-    });
+    const now = new Date();
+    const trendStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const [payments, trendPayments] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: {
+          voidedAt: null,
+          ...(from || to
+            ? {
+                paidAt: {
+                  ...(from ? { gte: new Date(from) } : {}),
+                  ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+                },
+              }
+            : {}),
+        },
+        orderBy: { paidAt: 'desc' },
+        include: { jobOrder: { include: { client: true } } },
+      }),
+      this.prisma.payment.findMany({
+        where: { voidedAt: null, paidAt: { gte: trendStart } },
+        select: { paidAt: true, amount: true },
+      }),
+    ]);
 
     const byMethodMap = new Map<PaymentMethod, { total: number; count: number }>();
     let totalCollected = 0;
@@ -51,11 +72,31 @@ export class FinancialReportsService {
       byMethodMap.set(p.method, entry);
     }
 
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const byMonth = Array.from({ length: 6 }, (_, i) => ({
+      month: monthKey(new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)),
+      total: 0,
+    }));
+    const monthIndex = new Map(byMonth.map((m, i) => [m.month, i]));
+    for (const p of trendPayments) {
+      const idx = monthIndex.get(monthKey(p.paidAt));
+      if (idx !== undefined) byMonth[idx].total += Number(p.amount);
+    }
+
     return {
       from: from ?? null,
       to: to ?? null,
       totalCollected,
       byMethod: [...byMethodMap.entries()].map(([method, v]) => ({ method, ...v })),
+      byMonth,
+      recentPayments: payments.slice(0, 10).map((p) => ({
+        id: p.id,
+        jobOrderId: p.jobOrderId,
+        amount: Number(p.amount),
+        method: p.method,
+        paidAt: p.paidAt.toISOString(),
+        clientName: p.jobOrder.client.businessName,
+      })),
     };
   }
 

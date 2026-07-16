@@ -425,6 +425,15 @@ export interface CollectionsSummary {
   to: string | null;
   totalCollected: number;
   byMethod: { method: PaymentMethod; total: number; count: number }[];
+  byMonth: { month: string; total: number }[];
+  recentPayments: {
+    id: string;
+    jobOrderId: string;
+    amount: number;
+    method: PaymentMethod;
+    paidAt: string;
+    clientName: string;
+  }[];
 }
 
 export interface OutstandingRow {
