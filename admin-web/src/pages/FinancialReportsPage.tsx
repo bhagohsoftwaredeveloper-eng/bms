@@ -63,8 +63,14 @@ export function FinancialReportsPage() {
       {tab === 'collections' && (
         <ChartCard title="Collections Summary" subtitle="Total collected by payment method">
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              From
+              <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              To
+              <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </label>
             <button type="button" className="btn btn-secondary" onClick={() => downloadCsv(`/reports/financial/export?type=collections&from=${from}&to=${to}`, 'collections.csv')}>
               Export CSV
             </button>

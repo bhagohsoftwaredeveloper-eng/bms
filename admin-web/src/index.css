@@ -405,6 +405,33 @@ input[type="text"] {
   width: 100%;
 }
 
+/* Standalone form controls (used outside a .field wrapper via class="input") —
+   same look as .field inputs. Width comes from the surrounding layout. */
+input.input,
+select.input {
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  width: auto;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input.input:hover,
+select.input:hover {
+  border-color: var(--accent);
+}
+
+input.input:focus,
+select.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.82rem;
