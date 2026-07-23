@@ -1,2 +1,9 @@
 [phases.setup]
 aptPkgs = ["default-mysql-client"]
+
+# Apply any pending Prisma migrations (e.g. the job_orders.type column) before
+# starting the app. Nixpacks auto-runs `prisma generate` during install, but
+# does not run `migrate deploy` on its own, so the production database schema
+# needs to be advanced explicitly on every deploy.
+[start]
+cmd = "npx prisma migrate deploy && node dist/main"
