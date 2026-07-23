@@ -21,7 +21,7 @@ export default function UsersScreen() {
             </View>
           </View>
           <Text style={s.meta}>{u.email}</Text>
-          <Text style={[s.meta, { color: '#4f46e5', fontWeight: '600' }]}>{formatRole(u.role)}</Text>
+          <Text style={[s.meta, { color: '#6d28d9', fontWeight: '600' }]}>{formatRole(u.role)}</Text>
         </View>
       )}
     />

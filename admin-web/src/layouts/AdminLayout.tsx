@@ -357,14 +357,10 @@ export function AdminLayout() {
             style={{
               width: 36,
               height: 36,
-              borderRadius: 10,
-              background: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              overflow: 'hidden',
-              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.5)',
             }}
           >
             <img src="/metriqa-logo.png" alt="METRIQA logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />

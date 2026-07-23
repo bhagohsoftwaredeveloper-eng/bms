@@ -42,7 +42,7 @@ export default function DashboardScreen() {
         const openJobs = jobs.data.filter((j) => j.jobStatus !== 'COMPLETED' && j.jobStatus !== 'CANCELLED').length;
         const pendingWd = withdrawals.data.filter((w) => w.status === 'PENDING').length;
         setStats([
-          { label: 'Clients', value: String(clients.data.length), color: '#4f46e5' },
+          { label: 'Clients', value: String(clients.data.length), color: '#6d28d9' },
           { label: 'Active Clients', value: String(activeClients), color: '#16a34a' },
           { label: 'Licenses', value: String(licenses.data.length), color: '#7c3aed' },
           { label: 'Active Licenses', value: String(activeLicenses), color: '#0891b2' },
@@ -61,7 +61,7 @@ export default function DashboardScreen() {
         setStats([
           { label: 'Available Balance', value: peso(balance.data.availableBalance), color: '#16a34a' },
           { label: 'Open Jobs', value: String(openJobs), color: '#d97706' },
-          { label: 'Completed Jobs', value: String(doneJobs), color: '#4f46e5' },
+          { label: 'Completed Jobs', value: String(doneJobs), color: '#6d28d9' },
           { label: 'Pending Withdrawals', value: String(pendingWd), color: '#dc2626' },
         ]);
       }
@@ -86,7 +86,7 @@ export default function DashboardScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color="#6d28d9" />
       </View>
     );
   }

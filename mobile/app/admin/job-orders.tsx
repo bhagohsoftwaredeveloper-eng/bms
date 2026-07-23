@@ -27,7 +27,7 @@ export default function JobOrdersScreen() {
             <Text style={s.meta}>{j.type} · {j.product?.productName ?? 'Custom'}</Text>
             <View style={s.row}>
               <Text style={s.meta}>{new Date(j.createdAt).toLocaleDateString()}</Text>
-              <Text style={[s.title, { color: '#4f46e5' }]}>{peso(Number(j.salePrice))}</Text>
+              <Text style={[s.title, { color: '#6d28d9' }]}>{peso(Number(j.salePrice))}</Text>
             </View>
           </View>
         </Pressable>

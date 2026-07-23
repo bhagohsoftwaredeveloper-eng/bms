@@ -106,7 +106,7 @@ export default function EarningsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color="#6d28d9" />
       </View>
     );
   }
@@ -243,7 +243,7 @@ export default function EarningsScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   container: { padding: 16, gap: 8, paddingBottom: 40 },
-  balanceCard: { backgroundColor: '#4f46e5', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 8 },
+  balanceCard: { backgroundColor: '#6d28d9', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 8 },
   balanceLabel: { color: '#c7d2fe', fontSize: 13, fontWeight: '600' },
   balanceValue: { color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 },
   requestBtn: {
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   requestBtnDisabled: { opacity: 0.5 },
-  requestBtnText: { color: '#4f46e5', fontWeight: '700', fontSize: 14 },
+  requestBtnText: { color: '#6d28d9', fontWeight: '700', fontSize: 14 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 12, marginBottom: 4 },
   empty: { color: '#9ca3af', fontSize: 13, paddingVertical: 8 },
   row: {
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f9fafb',
   },
-  methodChipActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  methodChipActive: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
   methodChipText: { fontSize: 12, fontWeight: '700', color: '#6b7280' },
   methodChipTextActive: { color: '#fff' },
   formError: { color: '#dc2626', fontSize: 13, marginTop: 12 },
@@ -308,6 +308,6 @@ const styles = StyleSheet.create({
   modalBtn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   cancelBtn: { backgroundColor: '#f3f4f6' },
   cancelBtnText: { color: '#374151', fontWeight: '700', fontSize: 14 },
-  submitBtn: { backgroundColor: '#4f46e5' },
+  submitBtn: { backgroundColor: '#6d28d9' },
   submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });

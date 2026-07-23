@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#6d28d9',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 24,
@@ -116,8 +116,8 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 36, fontWeight: '800' },
   name: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 8 },
   email: { fontSize: 14, color: '#6b7280' },
-  roleBadge: { backgroundColor: '#eef2ff', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, marginTop: 6 },
-  roleText: { color: '#4f46e5', fontWeight: '700', fontSize: 13 },
+  roleBadge: { backgroundColor: '#f3ebfc', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, marginTop: 6 },
+  roleText: { color: '#6d28d9', fontWeight: '700', fontSize: 13 },
   serverCard: {
     width: '100%',
     marginTop: 24,
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f9fafb',
   },
-  segmentBtnActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  segmentBtnActive: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
   segmentText: { fontSize: 13, fontWeight: '700', color: '#6b7280' },
   segmentTextActive: { color: '#fff' },
   input: {
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
   },
   serverWarn: { fontSize: 11, color: '#d97706' },
-  applyBtn: { backgroundColor: '#4f46e5', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  applyBtn: { backgroundColor: '#6d28d9', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   applyBtnDisabled: { opacity: 0.5 },
   applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   signOut: {

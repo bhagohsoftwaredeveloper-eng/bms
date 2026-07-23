@@ -58,7 +58,7 @@ export default function JobsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color="#6d28d9" />
       </View>
     );
   }
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  chipActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  chipActive: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
   chipText: { fontSize: 13, fontWeight: '700', color: '#6b7280' },
   chipTextActive: { color: '#fff' },
   list: { padding: 16, gap: 12, flexGrow: 1 },

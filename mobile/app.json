@@ -2,14 +2,14 @@
   "expo": {
     "name": "Beulah Field",
     "slug": "orbit-console",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "scheme": "beulah",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#4f46e5"
+      "backgroundColor": "#6d28d9"
     },
     "ios": {
       "supportsTablet": true,
@@ -18,7 +18,7 @@
     "android": {
       "package": "com.beulah.field",
       "adaptiveIcon": {
-        "backgroundColor": "#4f46e5"
+        "backgroundColor": "#6d28d9"
       },
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",

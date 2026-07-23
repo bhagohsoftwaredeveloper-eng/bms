@@ -16,7 +16,7 @@ export default function TabsLayout() {
   if (initializing) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color="#6d28d9" />
       </View>
     );
   }
@@ -28,10 +28,10 @@ export default function TabsLayout() {
   return (
     <MaterialTopTabs
       screenOptions={{
-        tabBarActiveTintColor: '#4f46e5',
+        tabBarActiveTintColor: '#6d28d9',
         tabBarInactiveTintColor: '#9ca3af',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700', textTransform: 'none' },
-        tabBarIndicatorStyle: { backgroundColor: '#4f46e5', height: 3 },
+        tabBarIndicatorStyle: { backgroundColor: '#6d28d9', height: 3 },
         tabBarStyle: { backgroundColor: '#fff' },
         tabBarShowIcon: true,
         tabBarScrollEnabled: false,

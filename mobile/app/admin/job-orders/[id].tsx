@@ -105,7 +105,7 @@ export default function JobOrderDetailScreen() {
   };
 
   if (loading) {
-    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator size="large" color="#4f46e5" /></View>;
+    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator size="large" color="#6d28d9" /></View>;
   }
   if (!jobOrder || !data) {
     return <View style={{ padding: 16 }}><Text>Job order not found.</Text></View>;
@@ -124,7 +124,7 @@ export default function JobOrderDetailScreen() {
         <Text style={s.meta}>Balance: <Text style={[s.title, { color: data.balance > 0 ? '#dc2626' : '#16a34a' }]}>{peso(data.balance)}</Text></Text>
       </View>
 
-      <Pressable style={{ backgroundColor: '#4f46e5', borderRadius: 10, padding: 12, alignItems: 'center' }} onPress={() => setShowForm((v) => !v)}>
+      <Pressable style={{ backgroundColor: '#6d28d9', borderRadius: 10, padding: 12, alignItems: 'center' }} onPress={() => setShowForm((v) => !v)}>
         <Text style={{ color: '#fff', fontWeight: '700' }}>{showForm ? 'Cancel' : 'Record Payment'}</Text>
       </Pressable>
 
@@ -133,7 +133,7 @@ export default function JobOrderDetailScreen() {
           <TextInput style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10 }} keyboardType="numeric" placeholder="Amount" value={amount} onChangeText={setAmount} />
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             {METHODS.map((m) => (
-              <Pressable key={m} onPress={() => setMethod(m)} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: method === m ? '#4f46e5' : '#eef0f4' }}>
+              <Pressable key={m} onPress={() => setMethod(m)} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: method === m ? '#6d28d9' : '#eef0f4' }}>
                 <Text style={{ color: method === m ? '#fff' : '#111827', fontSize: 12 }}>{m.replace('_', ' ')}</Text>
               </Pressable>
             ))}

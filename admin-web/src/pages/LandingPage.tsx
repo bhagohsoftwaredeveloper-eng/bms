@@ -238,10 +238,7 @@ function PhoneScreen({ step }: { step: number }) {
     default: // METRIQA logo splash
       return (
         <div className="lp-flip lp-phone-logo" key={step}>
-          <img src="/metriqa-logo.png" alt="" />
-          <div className="lp-app-title" style={{ marginBottom: 0 }}>
-            ORBIT <em>CONSOLE</em>
-          </div>
+          <img src="/metriqa-logo-new_e.png" alt="" />
           <div className="lp-scr-label" style={{ marginBottom: 0 }}>One system · office + field</div>
         </div>
       );
@@ -430,10 +427,8 @@ export function LandingPage() {
       <div className="lp-wrap">
         <header className="lp-topbar lp-rise lp-rise-1">
           <div className="lp-brand">
-            <img src="/metriqa-logo.png" alt="METRIQA logo" />
-            <span className="lp-brand-name">
-              ORBIT <em>CONSOLE</em>
-            </span>
+            <img src="/metriqa-logo-new_e.png" alt="METRIQA logo" />
+            <span className="lp-brand-name">METRIQA</span>
           </div>
           <Link to="/login" className="lp-btn lp-btn-ghost">
             Sign In
@@ -443,7 +438,9 @@ export function LandingPage() {
         {/* ── Hero ── */}
         <section className="lp-hero">
           <div>
-            <div className="lp-eyebrow lp-rise lp-rise-2">Field Ops · Licensing · KPI</div>
+            <div className="lp-eyebrow lp-rise lp-rise-2">
+              Installation, KPI, Incentives. Measure, Monitor and Rewards
+            </div>
             <h1 className="lp-rise lp-rise-2">
               Mission control for your <span className="lp-grad">software business</span>
             </h1>
@@ -870,10 +867,7 @@ export function LandingPage() {
         <footer className="lp-footer">
           <div className="lp-footer-top">
             <div className="lp-brand">
-              <img src="/metriqa-logo.png" alt="" />
-              <span className="lp-brand-name" style={{ fontSize: '0.85rem' }}>
-                ORBIT <em>CONSOLE</em>
-              </span>
+              <img src="/metriqa-logo-new_e.png" alt="METRIQA logo" />
             </div>
             <div className="lp-devs">
               <Link to="/developers" className="lp-footer-link">DEVELOPERS</Link>

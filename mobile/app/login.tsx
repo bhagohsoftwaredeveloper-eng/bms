@@ -79,7 +79,7 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#4f46e5', justifyContent: 'center', padding: 24 },
+  container: { flex: 1, backgroundColor: '#6d28d9', justifyContent: 'center', padding: 24 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 24, gap: 12 },
   title: { fontSize: 26, fontWeight: '800', color: '#111827', textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 8 },
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   },
   error: { color: '#dc2626', fontSize: 13, textAlign: 'center' },
   button: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#6d28d9',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',

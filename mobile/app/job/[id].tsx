@@ -115,7 +115,7 @@ export default function JobDetailScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color="#6d28d9" />
       </View>
     );
   }
@@ -186,13 +186,13 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 18, gap: 5, borderWidth: 1, borderColor: '#eef0f4' },
   business: { fontSize: 19, fontWeight: '800', color: '#111827', marginBottom: 4 },
   meta: { fontSize: 14, color: '#374151' },
-  status: { fontSize: 14, fontWeight: '700', color: '#4f46e5', marginTop: 6 },
+  status: { fontSize: 14, fontWeight: '700', color: '#6d28d9', marginTop: 6 },
   proofBox: { backgroundColor: '#fff', borderRadius: 12, padding: 18, gap: 12, borderWidth: 1, borderColor: '#eef0f4' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
   preview: { width: '100%', height: 200, borderRadius: 10, backgroundColor: '#f3f4f6' },
-  button: { backgroundColor: '#4f46e5', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+  button: { backgroundColor: '#6d28d9', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  secondaryButton: { borderWidth: 1, borderColor: '#4f46e5', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
-  secondaryText: { color: '#4f46e5', fontWeight: '700', fontSize: 15 },
+  secondaryButton: { borderWidth: 1, borderColor: '#6d28d9', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  secondaryText: { color: '#6d28d9', fontWeight: '700', fontSize: 15 },
   disabled: { opacity: 0.5 },
 });

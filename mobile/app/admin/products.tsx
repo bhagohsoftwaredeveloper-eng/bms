@@ -14,7 +14,7 @@ export default function ProductsScreen() {
         <View style={s.card}>
           <View style={s.row}>
             <Text style={s.title}>{p.productName}</Text>
-            <Text style={[s.title, { color: '#4f46e5' }]}>{peso(Number(p.price))}</Text>
+            <Text style={[s.title, { color: '#6d28d9' }]}>{peso(Number(p.price))}</Text>
           </View>
           <Text style={s.meta}>v{p.version} · {p.licenseType.replace(/_/g, ' ')}</Text>
         </View>
