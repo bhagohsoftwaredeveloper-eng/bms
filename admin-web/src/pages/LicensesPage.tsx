@@ -507,6 +507,9 @@ export function LicensesPage() {
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState(EMPTY_FINGERPRINT_FORM);
   const [viewLicense, setViewLicense] = useState<License | null>(null);
+  const [editingLicense, setEditingLicense] = useState<License | null>(null);
+  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, trialDays: 30 });
+  const [editError, setEditError] = useState('');
   const [licSearch, setLicSearch] = useState('');
   const [licStatus, setLicStatus] = useState('');
 
@@ -518,13 +521,13 @@ export function LicensesPage() {
   const clientsQuery = useQuery({
     queryKey: ['clients'],
     queryFn: async () => (await api.get<Client[]>('/clients')).data,
-    enabled: showForm,
+    enabled: showForm || !!editingLicense,
   });
 
   const productsQuery = useQuery({
     queryKey: ['products'],
     queryFn: async () => (await api.get<SoftwareProduct[]>('/software-products')).data,
-    enabled: showForm,
+    enabled: showForm || !!editingLicense,
   });
 
   const [generateError, setGenerateError] = useState('');
@@ -544,6 +547,38 @@ export function LicensesPage() {
     },
     onError: (err: any) => {
       setGenerateError(err?.response?.data?.message ?? 'Could not save the license. Try again.');
+    },
+  });
+
+  const openEdit = (license: License) => {
+    setEditingLicense(license);
+    setEditForm({
+      licenseKey: license.licenseKey,
+      clientId: license.clientId,
+      productId: license.productId,
+      isTrial: license.isTrial,
+      trialDays: license.trialDays ?? 30,
+    });
+    setEditError('');
+  };
+
+  const updateLicense = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        clientId: editForm.clientId,
+        productId: editForm.productId,
+        isTrial: editForm.isTrial,
+        ...(editForm.isTrial ? { trialDays: editForm.trialDays } : { licenseKey: editForm.licenseKey.trim() }),
+      };
+      return (await api.patch<License>(`/licenses/${editingLicense!.id}`, payload)).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['licenses'] });
+      setEditingLicense(null);
+      setEditError('');
+    },
+    onError: (err: any) => {
+      setEditError(err?.response?.data?.message ?? 'Could not update the license. Try again.');
     },
   });
 
@@ -767,6 +802,93 @@ export function LicensesPage() {
             )}
           </Dialog>
 
+          {/* Edit license dialog */}
+          <Dialog isOpen={!!editingLicense} onClose={() => setEditingLicense(null)} title="Edit License" maxWidth={480}>
+            {editingLicense && (
+              <form onSubmit={(e) => { e.preventDefault(); updateLicense.mutate(); }}>
+                <div className="field">
+                  <label>License type</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className={`btn ${!editForm.isTrial ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1 }}
+                      onClick={() => setEditForm({ ...editForm, isTrial: false })}
+                    >
+                      Full
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${editForm.isTrial ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1 }}
+                      disabled={editingLicense.status !== 'PENDING'}
+                      onClick={() => setEditForm({ ...editForm, isTrial: true })}
+                    >
+                      Trial
+                    </button>
+                  </div>
+                  {editingLicense.status !== 'PENDING' && (
+                    <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Activated licenses can't be changed back to trial.
+                    </p>
+                  )}
+                </div>
+                <div className="field">
+                  <label htmlFor="edit-clientId">Client</label>
+                  <select id="edit-clientId" required value={editForm.clientId} onChange={(e) => setEditForm({ ...editForm, clientId: e.target.value })}>
+                    <option value="">Select a client…</option>
+                    {clientsQuery.data?.map((c) => (
+                      <option key={c.id} value={c.id}>{c.businessName} ({c.clientCode})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="edit-productId">Software product</label>
+                  <select id="edit-productId" required value={editForm.productId} onChange={(e) => setEditForm({ ...editForm, productId: e.target.value })}>
+                    <option value="">Select a product…</option>
+                    {productsQuery.data?.map((p) => (
+                      <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
+                    ))}
+                  </select>
+                </div>
+                {editForm.isTrial ? (
+                  <div className="field">
+                    <label htmlFor="edit-trialDays">Trial days</label>
+                    <input
+                      id="edit-trialDays"
+                      type="number"
+                      min={1}
+                      max={365}
+                      required
+                      value={editForm.trialDays}
+                      onChange={(e) => setEditForm({ ...editForm, trialDays: Number(e.target.value) })}
+                    />
+                  </div>
+                ) : (
+                  <div className="field">
+                    <label htmlFor="edit-licenseKey">License key</label>
+                    <input
+                      id="edit-licenseKey"
+                      type="text"
+                      required
+                      value={editForm.licenseKey}
+                      onChange={(e) => setEditForm({ ...editForm, licenseKey: e.target.value })}
+                      placeholder="Enter the key issued by the provider"
+                      style={{ fontFamily: 'monospace' }}
+                    />
+                  </div>
+                )}
+                {editError && <p className="error-text">{editError}</p>}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                  <button type="submit" className="btn btn-primary" disabled={updateLicense.isPending} style={{ flex: 1 }}>
+                    {updateLicense.isPending ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingLicense(null)}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </Dialog>
+
           {/* Action bar */}
           {!isDeveloper && (
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
@@ -838,6 +960,13 @@ export function LicensesPage() {
                                       disabled={suspendLicense.isPending}
                                       onClick={() => suspendLicense.mutate(license.id)}>
                                       Suspend
+                                    </button>
+                                  )}
+                                  {!isDeveloper && (
+                                    <button type="button" className="btn btn-secondary"
+                                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                                      onClick={() => openEdit(license)}>
+                                      Edit
                                     </button>
                                   )}
                                   <button type="button" className="btn btn-secondary"
