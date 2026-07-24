@@ -149,7 +149,7 @@ export function ClientsPage() {
             <label>Client type</label>
             <ClientTypeToggle value={form.clientType} onChange={(t) => setForm({ ...form, clientType: t })} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '0 1rem' }}>
             <div className="field">
               <label htmlFor="clientCode">Client code</label>
               <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -239,7 +239,7 @@ export function ClientsPage() {
               <label>Client type</label>
               <ClientTypeToggle value={editForm.clientType} onChange={(t) => setEditForm({ ...editForm, clientType: t })} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '0 1rem' }}>
               <div className="field">
                 <label htmlFor="edit-clientCode">Client code</label>
                 <input
