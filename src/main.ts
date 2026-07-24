@@ -1,8 +1,37 @@
+import { execFileSync } from 'node:child_process';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+/**
+ * Apply any outstanding Prisma migrations before the app serves traffic.
+ *
+ * Railway builds this service with Railpack, which ignores `nixpacks.toml` —
+ * so the DB migrations never run at deploy time there and the schema drifts
+ * (e.g. the job_orders type/camera_count/doc_type columns missing → 500 on
+ * GET /job-orders). Running `prisma migrate deploy` here is builder-agnostic:
+ * it happens no matter how the process is launched, and is a no-op when the DB
+ * is already up to date (so the office-PC/PM2 deploy is unaffected).
+ */
+function runMigrations() {
+  try {
+    console.log('Running prisma migrate deploy…');
+    const out = execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
+      encoding: 'utf8',
+      shell: process.platform === 'win32',
+    });
+    console.log(out);
+  } catch (err) {
+    // Don't crash-loop the whole app if migrations fail — log loudly and boot
+    // anyway so unaffected endpoints keep serving; the failure is visible in
+    // the deploy logs for follow-up.
+    console.error('prisma migrate deploy failed:', err instanceof Error ? err.message : err);
+  }
+}
+
 async function bootstrap() {
+  runMigrations();
+
   const app = await NestFactory.create(AppModule);
 
   // Behind the Tailscale Funnel proxy the socket peer is loopback; trust its

@@ -1,2 +1,9 @@
 [phases.setup]
 aptPkgs = ["default-mysql-client"]
+
+# Apply any outstanding Prisma migrations against the target DB before the app
+# starts serving traffic (e.g. the job_orders type/camera_count/camera_rate/
+# labor_pct columns). Runs on every deploy; migrate deploy is a no-op when the
+# DB is already up to date.
+[start]
+cmd = "npx prisma migrate deploy && node dist/main"
