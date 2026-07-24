@@ -3,8 +3,10 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { LicenseStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { ActivateLicenseDto } from './activate-license.dto';
@@ -14,6 +16,8 @@ import { generateTrialKey } from './trial-key.util';
 
 @Injectable()
 export class LicensesService {
+  private readonly logger = new Logger(LicensesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly licenseCrypto: LicenseCryptoService,
@@ -139,5 +143,24 @@ export class LicensesService {
   async suspend(id: string) {
     await this.findOne(id);
     return this.prisma.license.update({ where: { id }, data: { status: LicenseStatus.SUSPENDED } });
+  }
+
+  /**
+   * Daily sweep: mark activated licenses whose expiry has passed as EXPIRED so the
+   * admin dashboard reflects reality (trials and any regular license with an expiry).
+   * The signed JWT already enforces expiry on the client; this keeps the DB in sync.
+   */
+  @Cron('0 2 * * *')
+  async expireOverdueLicenses(): Promise<void> {
+    const result = await this.prisma.license.updateMany({
+      where: {
+        status: LicenseStatus.ACTIVATED,
+        expirationDate: { not: null, lt: new Date() },
+      },
+      data: { status: LicenseStatus.EXPIRED },
+    });
+    if (result.count > 0) {
+      this.logger.log(`Expired ${result.count} license(s) past their expiration date`);
+    }
   }
 }
