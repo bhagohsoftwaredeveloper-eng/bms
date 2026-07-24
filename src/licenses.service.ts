@@ -107,6 +107,11 @@ export class LicensesService {
     }
 
     const activationDate = new Date();
+    const expirationDate =
+      license.isTrial && license.trialDays
+        ? new Date(activationDate.getTime() + license.trialDays * 24 * 60 * 60 * 1000)
+        : license.expirationDate;
+
     const licenseToken = this.licenseCrypto.signLicenseToken(
       {
         licenseId: license.id,
@@ -115,7 +120,7 @@ export class LicensesService {
         productId: license.productId,
         fingerprint: dto.fingerprint,
       },
-      license.expirationDate ?? undefined,
+      expirationDate ?? undefined,
     );
 
     return this.prisma.license.update({
@@ -124,6 +129,7 @@ export class LicensesService {
         status: LicenseStatus.ACTIVATED,
         activatedById: developerId,
         activationDate,
+        expirationDate,
         hardwareFingerprint: dto.fingerprint as unknown as object,
         licenseToken,
       },

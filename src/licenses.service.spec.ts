@@ -45,3 +45,34 @@ describe('LicensesService.generate (trial)', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('LicensesService.activate (trial)', () => {
+  it('sets expirationDate = activation + trialDays and signs with that expiry', async () => {
+    const { service, prisma, crypto } = buildService();
+    prisma.license.findUnique.mockResolvedValue({
+      id: 'lic-1',
+      status: 'PENDING',
+      isTrial: true,
+      trialDays: 30,
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: null,
+      client: {},
+      product: {},
+      activatedBy: null,
+    });
+
+    const before = Date.now();
+    const result = await service.activate('lic-1', 'dev-1', {
+      fingerprint: { cpu: 'c', disk: 'd', mac: 'm' },
+    } as never);
+
+    const expiry = new Date(result.expirationDate as Date).getTime();
+    // ~30 days out (allow a small margin below 30 for execution time).
+    expect(expiry).toBeGreaterThan(before + 29.9 * 24 * 60 * 60 * 1000);
+    expect(crypto.signLicenseToken).toHaveBeenCalledTimes(1);
+    const passedExpiry = (crypto.signLicenseToken.mock.calls[0][1] as Date).getTime();
+    expect(passedExpiry).toBe(expiry);
+  });
+});
