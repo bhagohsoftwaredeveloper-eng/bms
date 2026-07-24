@@ -1,9 +1,16 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { LicenseStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { ActivateLicenseDto } from './activate-license.dto';
 import { GenerateLicenseDto } from './generate-license.dto';
 import { LicenseCryptoService } from './license-crypto.service';
+import { generateTrialKey } from './trial-key.util';
 
 @Injectable()
 export class LicensesService {
@@ -21,6 +28,25 @@ export class LicensesService {
     if (!client) throw new NotFoundException(`Client ${dto.clientId} not found`);
     if (!product) throw new NotFoundException(`Software product ${dto.productId} not found`);
 
+    if (dto.isTrial) {
+      const licenseKey = await this.generateUniqueTrialKey();
+      return this.prisma.license.create({
+        data: {
+          licenseKey,
+          clientId: dto.clientId,
+          productId: dto.productId,
+          isTrial: true,
+          trialDays: dto.trialDays ?? 30,
+          expirationDate: null,
+          status: LicenseStatus.PENDING,
+        },
+      });
+    }
+
+    if (!dto.licenseKey) {
+      throw new BadRequestException('License key is required for a non-trial license');
+    }
+
     const existing = await this.prisma.license.findUnique({
       where: { licenseKey: dto.licenseKey },
     });
@@ -37,6 +63,16 @@ export class LicensesService {
         status: LicenseStatus.PENDING,
       },
     });
+  }
+
+  /** Generate a TRIAL- key, retrying on the rare collision against the unique index. */
+  private async generateUniqueTrialKey(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const key = generateTrialKey();
+      const clash = await this.prisma.license.findUnique({ where: { licenseKey: key } });
+      if (!clash) return key;
+    }
+    throw new InternalServerErrorException('Could not generate a unique trial license key');
   }
 
   findAll() {
