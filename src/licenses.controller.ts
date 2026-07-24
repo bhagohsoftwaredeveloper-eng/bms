@@ -7,6 +7,7 @@ import { RolesGuard } from './roles.guard';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { ActivateLicenseDto } from './activate-license.dto';
 import { GenerateLicenseDto } from './generate-license.dto';
+import { UpdateLicenseDto } from './update-license.dto';
 import { LicensesService } from './licenses.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -46,5 +47,12 @@ export class LicensesController {
   @Patch(':id/suspend')
   suspend(@Param('id') id: string) {
     return this.licensesService.suspend(id);
+  }
+
+  /** Edit a license (e.g. record the real provider key when a trial is upgraded). */
+  @Roles(UserRole.SUPER_ADMIN)
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateLicenseDto) {
+    return this.licensesService.update(id, dto);
   }
 }
