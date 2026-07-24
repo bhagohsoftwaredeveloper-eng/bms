@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { LicensesService } from './licenses.service';
 
 function buildService() {
@@ -74,6 +74,84 @@ describe('LicensesService.activate (trial)', () => {
     expect(crypto.signLicenseToken).toHaveBeenCalledTimes(1);
     const passedExpiry = (crypto.signLicenseToken.mock.calls[0][1] as Date).getTime();
     expect(passedExpiry).toBe(expiry);
+  });
+});
+
+describe('LicensesService.update', () => {
+  function pendingTrial() {
+    return {
+      id: 'lic-1',
+      status: 'PENDING',
+      isTrial: true,
+      trialDays: 30,
+      licenseKey: 'TRIAL-AAAA-BBBB',
+      clientId: 'client-1',
+      productId: 'product-1',
+      expirationDate: null,
+      client: {},
+      product: {},
+      activatedBy: null,
+    };
+  }
+
+  it('updates the license key', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? pendingTrial() : null),
+    );
+
+    const result = await service.update('lic-1', { licenseKey: 'REAL-KEY-123' });
+
+    expect(prisma.license.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'lic-1' },
+        data: expect.objectContaining({ licenseKey: 'REAL-KEY-123' }),
+      }),
+    );
+    expect(result.licenseKey).toBe('REAL-KEY-123');
+  });
+
+  it('rejects a key already used by another license', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? pendingTrial() : { id: 'other-lic' }),
+    );
+
+    await expect(service.update('lic-1', { licenseKey: 'DUP' })).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('converting trial -> full clears trialDays and expirationDate', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), expirationDate: new Date() } : null),
+    );
+
+    const result = await service.update('lic-1', { isTrial: false, licenseKey: 'REAL-1' });
+
+    expect(result.isTrial).toBe(false);
+    expect(result.trialDays).toBeNull();
+    expect(result.expirationDate).toBeNull();
+  });
+
+  it('blocks setting isTrial=true on a non-PENDING license', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), status: 'ACTIVATED', isTrial: false } : null),
+    );
+
+    await expect(service.update('lic-1', { isTrial: true })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('allows setting isTrial=true on a PENDING license', async () => {
+    const { service, prisma } = buildService();
+    prisma.license.findUnique.mockImplementation(({ where }: { where: { id?: string; licenseKey?: string } }) =>
+      Promise.resolve(where.id ? { ...pendingTrial(), isTrial: false, trialDays: null } : null),
+    );
+
+    const result = await service.update('lic-1', { isTrial: true, trialDays: 14 });
+
+    expect(result.isTrial).toBe(true);
+    expect(result.trialDays).toBe(14);
   });
 });
 

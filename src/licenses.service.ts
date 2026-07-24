@@ -11,6 +11,7 @@ import { LicenseStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { ActivateLicenseDto } from './activate-license.dto';
 import { GenerateLicenseDto } from './generate-license.dto';
+import { UpdateLicenseDto } from './update-license.dto';
 import { LicenseCryptoService } from './license-crypto.service';
 import { generateTrialKey } from './trial-key.util';
 
@@ -143,6 +144,56 @@ export class LicensesService {
   async suspend(id: string) {
     await this.findOne(id);
     return this.prisma.license.update({ where: { id }, data: { status: LicenseStatus.SUSPENDED } });
+  }
+
+  /**
+   * Edit an existing license — primarily to record the real provider key once a client
+   * upgrades from a trial. Only updates the record; activation state and the signed token
+   * are left untouched. A license can only be turned back into a trial while still PENDING.
+   */
+  async update(id: string, dto: UpdateLicenseDto) {
+    const existing = await this.findOne(id);
+
+    if (dto.isTrial === true && existing.status !== LicenseStatus.PENDING) {
+      throw new BadRequestException('An activated license cannot be changed back to a trial');
+    }
+
+    if (dto.licenseKey && dto.licenseKey !== existing.licenseKey) {
+      const clash = await this.prisma.license.findUnique({ where: { licenseKey: dto.licenseKey } });
+      if (clash && clash.id !== id) {
+        throw new ConflictException('A license with this key already exists');
+      }
+    }
+
+    const newIsTrial = dto.isTrial ?? existing.isTrial;
+    const data: {
+      licenseKey?: string;
+      clientId?: string;
+      productId?: string;
+      isTrial?: boolean;
+      trialDays?: number | null;
+      expirationDate?: Date | null;
+    } = {};
+
+    if (dto.licenseKey !== undefined) data.licenseKey = dto.licenseKey;
+    if (dto.clientId !== undefined) data.clientId = dto.clientId;
+    if (dto.productId !== undefined) data.productId = dto.productId;
+
+    if (dto.isTrial !== undefined) data.isTrial = newIsTrial;
+
+    if (newIsTrial) {
+      data.trialDays = dto.trialDays ?? existing.trialDays ?? 30;
+    } else if (existing.isTrial) {
+      // Converting trial -> full: drop the trial window entirely.
+      data.trialDays = null;
+      data.expirationDate = null;
+    }
+
+    return this.prisma.license.update({
+      where: { id },
+      data,
+      include: { client: true, product: true },
+    });
   }
 
   /**
