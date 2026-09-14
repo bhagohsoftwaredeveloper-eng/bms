@@ -9,6 +9,7 @@ import { AssignInstallerDto } from './assign-installer.dto';
 import { CreateJobDto } from './create-job.dto';
 import { SubmitProofDto } from './submit-proof.dto';
 import { UpdateJobStatusDto } from './update-job-status.dto';
+import { UpdateJobDto } from './update-job.dto';
 import { JobsService } from './jobs.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -47,6 +48,12 @@ export class JobsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.jobsService.findOne(id);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateJobDto) {
+    return this.jobsService.update(id, dto);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)

@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useState } from 'react';
+import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import { Eye, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../lib/api';
@@ -12,10 +12,81 @@ import type { AuthenticatedUser, Client, Job, JobStatus } from '../lib/types';
 const EMPTY_FORM = { clientId: '', installerId: '', scheduleDate: '', remarks: '' };
 const JOB_STATUSES: JobStatus[] = ['ASSIGNED', 'ON_GOING', 'WAITING_ACTIVATION', 'COMPLETED', 'CANCELLED'];
 
+function SearchableClientSelect({ value, onChange, clients }: {
+  value: string;
+  onChange: (clientId: string) => void;
+  clients: Client[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const selectedClient = clients.find((client) => client.id === value);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredClients = clients.filter((client) =>
+    `${client.businessName} ${client.clientCode}`.toLowerCase().includes(normalizedSearch),
+  ).slice(0, 20);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [open]);
+
+  return (
+    <div ref={pickerRef} style={{ position: 'relative' }}>
+      <input
+        id="clientId"
+        required={!value}
+        value={search}
+        placeholder={selectedClient ? `${selectedClient.businessName} (${selectedClient.clientCode})` : 'Type a client name or code…'}
+        onFocus={() => { setOpen(true); setSearch(''); }}
+        onChange={(event) => { onChange(''); setSearch(event.target.value); setOpen(true); }}
+        autoComplete="off"
+        aria-label="Search client"
+        aria-expanded={open}
+        role="combobox"
+      />
+      {open && (
+        <div role="listbox" style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 280, overflowY: 'auto',
+        }}>
+          {filteredClients.length === 0 ? (
+            <div style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+              No matching clients.
+            </div>
+          ) : filteredClients.map((client) => (
+            <button
+              key={client.id}
+              type="button"
+              role="option"
+              aria-selected={client.id === value}
+              onClick={() => { onChange(client.id); setSearch(''); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', padding: '0.6rem 0.85rem', border: 0,
+                borderBottom: '1px solid var(--border)', background: client.id === value ? 'var(--bg)' : 'transparent',
+                color: 'var(--text)', textAlign: 'left', cursor: 'pointer', fontSize: '0.875rem',
+              }}
+            >
+              {client.businessName} <span style={{ color: 'var(--text-muted)' }}>({client.clientCode})</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [assigningJobId, setAssigningJobId] = useState<string | null>(null);
   const [assignInstallerId, setAssignInstallerId] = useState('');
 
@@ -27,13 +98,13 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const clientsQuery = useQuery({
     queryKey: ['clients'],
     queryFn: async () => (await api.get<Client[]>('/clients')).data,
-    enabled: showForm,
+    enabled: showForm || editingJobId !== null,
   });
 
   const installersQuery = useQuery({
     queryKey: ['users', 'INSTALLER'],
     queryFn: async () => (await api.get<AuthenticatedUser[]>('/users', { params: { role: 'INSTALLER' } })).data,
-    enabled: showForm || assigningJobId !== null,
+    enabled: showForm || editingJobId !== null || assigningJobId !== null,
   });
 
   const createJob = useMutation({
@@ -63,6 +134,21 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
     },
   });
 
+  const updateJob = useMutation({
+    mutationFn: async () =>
+      (await api.patch<Job>(`/jobs/${editingJobId}`, {
+        clientId: editForm.clientId,
+        installerId: editForm.installerId || null,
+        scheduleDate: editForm.scheduleDate,
+        remarks: editForm.remarks || null,
+      })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      setEditingJobId(null);
+      setEditForm(EMPTY_FORM);
+    },
+  });
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     createJob.mutate();
@@ -71,6 +157,21 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const handleAssignSubmit = (event: FormEvent, id: string) => {
     event.preventDefault();
     assignInstaller.mutate({ id, installerId: assignInstallerId });
+  };
+
+  const openEditForm = (job: Job) => {
+    setEditForm({
+      clientId: job.clientId,
+      installerId: job.installerId ?? '',
+      scheduleDate: String(job.scheduleDate).slice(0, 10),
+      remarks: job.remarks ?? '',
+    });
+    setEditingJobId(job.id);
+  };
+
+  const handleEditSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    updateJob.mutate();
   };
 
   const activeJobToAssign = jobsQuery.data?.find(j => j.id === assigningJobId);
@@ -102,19 +203,11 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="clientId">Client</label>
-            <select
-              id="clientId"
-              required
+            <SearchableClientSelect
               value={form.clientId}
-              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-            >
-              <option value="">Select a client…</option>
-              {clientsQuery.data?.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.businessName} ({client.clientCode})
-                </option>
-              ))}
-            </select>
+              onChange={(clientId) => setForm({ ...form, clientId })}
+              clients={clientsQuery.data ?? []}
+            />
           </div>
           <div className="field">
             <label htmlFor="installerId">Installer (optional)</label>
@@ -156,6 +249,65 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
               {createJob.isPending ? 'Saving…' : 'Schedule'}
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog
+        isOpen={!!editingJobId}
+        onClose={() => setEditingJobId(null)}
+        title="Edit Installation"
+        maxWidth={480}
+      >
+        <form onSubmit={handleEditSubmit}>
+          <div className="field">
+            <label htmlFor="edit-clientId">Client</label>
+            <SearchableClientSelect
+              value={editForm.clientId}
+              onChange={(clientId) => setEditForm({ ...editForm, clientId })}
+              clients={clientsQuery.data ?? []}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="edit-installerId">Installer (optional)</label>
+            <select
+              id="edit-installerId"
+              value={editForm.installerId}
+              onChange={(event) => setEditForm({ ...editForm, installerId: event.target.value })}
+            >
+              <option value="">Unassigned</option>
+              {installersQuery.data?.map((installer) => (
+                <option key={installer.id} value={installer.id}>{installer.fullName}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="edit-scheduleDate">Schedule date</label>
+            <input
+              id="edit-scheduleDate"
+              type="date"
+              required
+              value={editForm.scheduleDate}
+              onChange={(event) => setEditForm({ ...editForm, scheduleDate: event.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="edit-remarks">Remarks</label>
+            <textarea
+              id="edit-remarks"
+              rows={2}
+              value={editForm.remarks}
+              onChange={(event) => setEditForm({ ...editForm, remarks: event.target.value })}
+            />
+          </div>
+          {updateJob.isError && <p className="error-text">Could not update the installation. Try again.</p>}
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+            <button type="submit" className="btn btn-primary" disabled={updateJob.isPending} style={{ flex: 1 }}>
+              {updateJob.isPending ? 'Saving…' : 'Save changes'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setEditingJobId(null)}>
               Cancel
             </button>
           </div>
@@ -207,13 +359,14 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
         )}
       </Dialog>
 
-      <AdminJobsTable data={jobsQuery.data ?? []} isLoading={jobsQuery.isLoading} isError={jobsQuery.isError} isReadOnly={isReadOnly} onAssign={(id, installerId) => { setAssigningJobId(id); setAssignInstallerId(installerId ?? ''); }} />
+      <AdminJobsTable data={jobsQuery.data ?? []} isLoading={jobsQuery.isLoading} isError={jobsQuery.isError} isReadOnly={isReadOnly} onEdit={openEditForm} onAssign={(id, installerId) => { setAssigningJobId(id); setAssignInstallerId(installerId ?? ''); }} />
     </div>
   );
 }
 
-function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onAssign }: {
+function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onEdit, onAssign }: {
   data: Job[]; isLoading: boolean; isError: boolean; isReadOnly?: boolean;
+  onEdit: (job: Job) => void;
   onAssign: (id: string, installerId: string | null) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -269,6 +422,14 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onAssign
                   {!isReadOnly && (
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                          onClick={() => onEdit(job)}
+                        >
+                          Edit
+                        </button>
                         {(job.jobStatus === 'ASSIGNED' || !job.installerId) && (
                           <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onAssign(job.id, job.installerId ?? null)}>Assign</button>
                         )}

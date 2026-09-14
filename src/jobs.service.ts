@@ -11,6 +11,7 @@ import { AssignInstallerDto } from './assign-installer.dto';
 import { CreateJobDto } from './create-job.dto';
 import { SubmitProofDto } from './submit-proof.dto';
 import { UpdateJobStatusDto } from './update-job-status.dto';
+import { UpdateJobDto } from './update-job.dto';
 
 @Injectable()
 export class JobsService {
@@ -69,6 +70,20 @@ export class JobsService {
     });
     await this.notifyAssignment(id, dto.installerId, job.client.businessName);
     return updated;
+  }
+
+  async update(id: string, dto: UpdateJobDto) {
+    await this.findOne(id);
+    return this.prisma.job.update({
+      where: { id },
+      data: {
+        clientId: dto.clientId,
+        installerId: dto.installerId ?? null,
+        scheduleDate: dto.scheduleDate,
+        remarks: dto.remarks ?? null,
+      },
+      include: { client: true, installer: true, license: true, proof: true },
+    });
   }
 
   private notifyAssignment(jobId: string, installerId: string, clientName: string) {
