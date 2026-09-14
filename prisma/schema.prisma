@@ -545,6 +545,7 @@ model InventoryItem {
 
   jobOrderItems JobOrderItem[]
   movements     StockMovement[]
+  packageItems  ItemPackageItem[]
   category ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
@@ -572,6 +573,43 @@ model StockMovement {
 
   @@index([inventoryItemId])
   @@map("stock_movements")
+}
+
+/**
+ * A named bundle of inventory items (e.g. "Package 1" = keyboard, mouse,
+ * monitor, system unit, printer, scanner, cash drawer). Inserting it into a
+ * job order or quotation expands into one line per component at each
+ * component's current price — the package itself carries no price of its own.
+ */
+model ItemPackage {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String? @db.Text
+  sortOrder   Int     @default(0) @map("sort_order")
+  active      Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items ItemPackageItem[]
+
+  @@map("item_packages")
+}
+
+/** One component line of a package. Points at a live inventory item so the
+ *  package always prices and breaks down from the current catalog. */
+model ItemPackageItem {
+  id              String @id @default(uuid())
+  packageId       String @map("package_id")
+  inventoryItemId String @map("inventory_item_id")
+  quantity        Int    @default(1)
+  sortOrder       Int    @default(0) @map("sort_order")
+
+  package       ItemPackage   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@map("item_package_items")
 }
 
 // ---------------------------------------------------------------------------

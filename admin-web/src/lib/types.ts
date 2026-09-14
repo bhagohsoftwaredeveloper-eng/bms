@@ -457,6 +457,27 @@ export interface InventoryItem {
   updatedAt: string;
 }
 
+export interface ItemPackageComponent {
+  id: string;
+  packageId: string;
+  inventoryItemId: string;
+  quantity: number;
+  sortOrder: number;
+  inventoryItem?: InventoryItem;
+}
+
+/** A named bundle of inventory items that expands into job-order line items. */
+export interface ItemPackage {
+  id: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  items: ItemPackageComponent[];
+}
+
 export type StockMovementReason = 'MANUAL_ADJUST' | 'JOB_ORDER_DEDUCTION' | 'JOB_ORDER_RESTORE';
 
 export interface StockMovement {

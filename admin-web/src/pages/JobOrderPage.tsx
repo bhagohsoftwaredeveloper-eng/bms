@@ -34,7 +34,7 @@ import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
 import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, Job, JobOrder, JobOrderItem, JobOrderPayments as JobOrderPaymentsSummary, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
+import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, ItemPackage, Job, JobOrder, JobOrderItem, JobOrderPayments as JobOrderPaymentsSummary, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
 import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
 import type { DocumentType as DocType } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
@@ -328,6 +328,10 @@ export function JobOrderPage() {
     queryKey: ['inventory'],
     queryFn: async () => (await api.get<InventoryItem[]>('/inventory')).data,
   });
+  const packagesQuery = useQuery({
+    queryKey: ['item-packages'],
+    queryFn: async () => (await api.get<ItemPackage[]>('/item-packages')).data,
+  });
   const companyProfileQuery = useQuery({
     queryKey: ['company-profile'],
     queryFn: async () => (await api.get<CompanyProfile>('/company-profile')).data,
@@ -372,6 +376,62 @@ export function JobOrderPage() {
   const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' as WarrantyTier });
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [includeAgreement, setIncludeAgreement] = useState(false);
+
+  // ── Package insert: pick a bundle, review/trim the breakdown, then expand ──
+  const [showPackageDialog, setShowPackageDialog] = useState(false);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [packageQty, setPackageQty] = useState(1);
+  const [excludedComponents, setExcludedComponents] = useState<Set<string>>(new Set());
+
+  const packages = packagesQuery?.data ?? [];
+  const selectedPackage = packages.find((p) => p.id === selectedPackageId);
+
+  const openPackageDialog = () => {
+    setSelectedPackageId('');
+    setPackageQty(1);
+    setExcludedComponents(new Set());
+    setShowPackageDialog(true);
+  };
+
+  const togglePackageComponent = (inventoryItemId: string) => {
+    setExcludedComponents((prev) => {
+      const next = new Set(prev);
+      if (next.has(inventoryItemId)) next.delete(inventoryItemId);
+      else next.add(inventoryItemId);
+      return next;
+    });
+  };
+
+  const pkgPerUnitTotal = selectedPackage
+    ? selectedPackage.items
+        .filter((c) => !excludedComponents.has(c.inventoryItemId))
+        .reduce((s, c) => s + c.quantity * Number(c.inventoryItem?.unitPrice ?? 0), 0)
+    : 0;
+  const pkgIncludedCount = selectedPackage
+    ? selectedPackage.items.length - excludedComponents.size
+    : 0;
+
+  /** Expands a package into one LineItem per included component. */
+  const expandPackage = (pkg: ItemPackage, qty: number, excluded: Set<string> = new Set()) => {
+    const newItems: LineItem[] = pkg.items
+      .filter((c) => !excluded.has(c.inventoryItemId))
+      .map((c) => ({
+        _key: newKey(),
+        inventoryItemId: c.inventoryItemId,
+        name: c.inventoryItem?.name ?? 'Item',
+        description: c.inventoryItem?.description ?? '',
+        quantity: c.quantity * Math.max(1, qty),
+        unitPrice: Number(c.inventoryItem?.unitPrice ?? 0),
+        warrantyTier: 'ACCESSORY',
+      }));
+    setItems((prev) => [...prev, ...newItems]);
+  };
+
+  const applyPackage = () => {
+    if (!selectedPackage) return;
+    expandPackage(selectedPackage, packageQty, excludedComponents);
+    setShowPackageDialog(false);
+  };
 
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
@@ -580,6 +640,10 @@ export function JobOrderPage() {
   const itemQuery = scanCode.trim().toLowerCase();
   const quickAddItems = itemQuery
     ? (inventoryQuery.data ?? []).filter((i) => i.name.toLowerCase().includes(itemQuery))
+    : [];
+  // Typing "package 1" in the same box offers the matching bundle first.
+  const quickAddPackages = itemQuery
+    ? packages.filter((p) => p.name.toLowerCase().includes(itemQuery))
     : [];
 
   // A printed order reproduces the version it was pinned to; an unprinted one
@@ -1005,7 +1069,7 @@ export function JobOrderPage() {
                   </span>
                   <input
                     value={scanCode}
-                    placeholder="Search items, or scan a barcode and press Enter"
+                    placeholder="Search items or packages (e.g. Package 1), or scan a barcode…"
                     className="item-search-input"
                     onChange={(e) => { setScanCode(e.target.value); setScanError(''); }}
                   />
@@ -1025,6 +1089,25 @@ export function JobOrderPage() {
                   </p>
                 )}
 
+                {itemQuery && quickAddPackages.length > 0 && (
+                  <div className="item-search-results">
+                    {quickAddPackages.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="item-search-result"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { expandPackage(p, 1); setScanCode(''); }}
+                      >
+                        <span className="isr-name">📦 {p.name} — package ({p.items.length} item{p.items.length === 1 ? '' : 's'})</span>
+                        {p.description && <span className="isr-desc">{p.description}</span>}
+                        <span className="isr-qty">
+                          ₱{p.items.reduce((s, c) => s + c.quantity * Number(c.inventoryItem?.unitPrice ?? 0), 0).toLocaleString()} total
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {itemQuery && quickAddItems.length > 0 && (
                   <div className="item-search-results">
                     {quickAddItems.map((item) => (
@@ -1047,9 +1130,9 @@ export function JobOrderPage() {
                     ))}
                   </div>
                 )}
-                {itemQuery && quickAddItems.length === 0 && !inventoryQuery.isLoading && (
+                {itemQuery && quickAddItems.length === 0 && quickAddPackages.length === 0 && !inventoryQuery.isLoading && (
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                    No items match "{scanCode}".
+                    No items or packages match "{scanCode}".
                   </p>
                 )}
               </div>
@@ -1139,14 +1222,24 @@ export function JobOrderPage() {
               )}
 
               {!showCustomForm && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}
-                  onClick={() => setShowCustomForm(true)}
-                >
-                  + Add custom item
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.85rem', borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                    onClick={openPackageDialog}
+                  >
+                    📦 Insert Package
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.85rem' }}
+                    onClick={() => setShowCustomForm(true)}
+                  >
+                    + Add custom item
+                  </button>
+                </div>
               )}
 
               {showCustomForm && (
@@ -1348,6 +1441,106 @@ export function JobOrderPage() {
           </aside>
         </div>
       </div>
+
+      {/* ── Insert Package Dialog ── */}
+      <Dialog
+        isOpen={showPackageDialog}
+        onClose={() => setShowPackageDialog(false)}
+        title="Insert Package"
+        maxWidth={520}
+      >
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 0 }}>
+          Expands the package into one line per component, priced from the current inventory catalog. Untick any
+          component you don't need.
+        </p>
+        <div className="field">
+          <label htmlFor="pkg-select">Package</label>
+          <select
+            id="pkg-select"
+            value={selectedPackageId}
+            onChange={(e) => { setSelectedPackageId(e.target.value); setExcludedComponents(new Set()); }}
+          >
+            <option value="">Select a package…</option>
+            {packages.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        {selectedPackage && (
+          <>
+            <div className="field" style={{ maxWidth: 160 }}>
+              <label htmlFor="pkg-qty">Number of packages</label>
+              <input
+                id="pkg-qty"
+                type="number"
+                min={1}
+                value={packageQty}
+                onChange={(e) => setPackageQty(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+              />
+            </div>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: '0.25rem' }}>
+              {selectedPackage.items.map((c) => {
+                const excluded = excludedComponents.has(c.inventoryItemId);
+                return (
+                  <label
+                    key={c.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.45rem 0.7rem',
+                      borderBottom: '1px solid var(--border)',
+                      cursor: 'pointer',
+                      background: excluded ? undefined : 'var(--accent-light)',
+                    }}
+                  >
+                    <input type="checkbox" checked={!excluded} onChange={() => togglePackageComponent(c.inventoryItemId)} />
+                    <span style={{ flex: 1, fontSize: '0.875rem', minWidth: 0 }}>
+                      {c.quantity}× {c.inventoryItem?.name ?? 'Item'}
+                      {c.inventoryItem?.description && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '0.35rem' }}>
+                          {c.inventoryItem.description}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      ₱{(c.quantity * Number(c.inventoryItem?.unitPrice ?? 0)).toLocaleString()}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                {pkgIncludedCount} of {selectedPackage.items.length} components
+              </span>
+              <strong>
+                Total: ₱{(pkgPerUnitTotal * packageQty).toLocaleString()}
+                {packageQty > 1 ? ` (${packageQty}×)` : ''}
+              </strong>
+            </div>
+          </>
+        )}
+        {packages.length === 0 && !packagesQuery.isLoading && (
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            No packages yet. Create them under Settings → Inventory Management → 📦 Manage packages.
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ flex: 1 }}
+            disabled={!selectedPackage || pkgIncludedCount === 0}
+            onClick={applyPackage}
+          >
+            Insert {selectedPackage ? `(${pkgIncludedCount} item${pkgIncludedCount === 1 ? '' : 's'})` : ''}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowPackageDialog(false)}>
+            Cancel
+          </button>
+        </div>
+      </Dialog>
 
       {/* ── Change Document Type Dialog ── */}
       <Dialog
