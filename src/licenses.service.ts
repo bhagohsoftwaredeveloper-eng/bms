@@ -13,6 +13,8 @@ import { ActivateLicenseDto } from './activate-license.dto';
 import { GenerateLicenseDto } from './generate-license.dto';
 import { UpdateLicenseDto } from './update-license.dto';
 import { LicenseCryptoService } from './license-crypto.service';
+import { AuthService } from './auth.service';
+import { VoidTransferActionDto } from './void-transfer-action.dto';
 import { generateTrialKey } from './trial-key.util';
 
 /** Whole days between two dates, rounded up (used to derive a display-only trialDays). */
@@ -27,6 +29,7 @@ export class LicensesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly licenseCrypto: LicenseCryptoService,
+    private readonly auth: AuthService,
   ) {}
 
   async generate(dto: GenerateLicenseDto) {
@@ -81,6 +84,86 @@ export class LicensesService {
     });
   }
 
+  /**
+   * Secure void: soft-delete a wrongly-entered license. Reversible only by a
+   * developer directly in the database — no self-service restore.
+   */
+  async void(id: string, userId: string, dto: VoidTransferActionDto) {
+    await this.auth.verifyPassword(userId, dto.password);
+
+    const license = await this.prisma.license.findUnique({
+      where: { id },
+      include: { client: true },
+    });
+    if (!license) throw new NotFoundException(`License ${id} not found`);
+    if (license.voidedAt) throw new BadRequestException('This license was already voided/transferred.');
+    if (dto.confirmName.trim().toLowerCase() !== license.client.businessName.trim().toLowerCase()) {
+      throw new BadRequestException("Name doesn't match — nothing was changed.");
+    }
+
+    return this.prisma.license.update({
+      where: { id },
+      data: {
+        voidedAt: new Date(),
+        voidedById: userId,
+        voidReason: dto.reason?.trim() || null,
+      },
+    });
+  }
+
+  /**
+   * Transfer a Bhagoh license into the NENPOS table: copies the client/license
+   * data into a new NenposClient row and voids the source license, in one
+   * transaction.
+   */
+  async transferToNenpos(id: string, userId: string, dto: VoidTransferActionDto) {
+    await this.auth.verifyPassword(userId, dto.password);
+
+    const license = await this.prisma.license.findUnique({
+      where: { id },
+      include: { client: true, product: true },
+    });
+    if (!license) throw new NotFoundException(`License ${id} not found`);
+    if (license.voidedAt) throw new BadRequestException('This license was already voided/transferred.');
+    if (dto.confirmName.trim().toLowerCase() !== license.client.businessName.trim().toLowerCase()) {
+      throw new BadRequestException("Name doesn't match — nothing was changed.");
+    }
+
+    const statusMap: Record<string, string> = {
+      ACTIVATED: 'ACTIVE',
+      EXPIRED: 'EXPIRED',
+      SUSPENDED: 'SUSPENDED',
+      PENDING: 'ACTIVE',
+    };
+
+    const [, nenposClient] = await this.prisma.$transaction(async (tx) => {
+      const nenposClient = await tx.nenposClient.create({
+        data: {
+          clientId: license.client.clientCode,
+          clientName: license.client.businessName,
+          startDate: license.activationDate,
+          expiryDate: license.expirationDate,
+          license: license.licenseKey,
+          status: statusMap[license.status] ?? 'ACTIVE',
+          address: license.client.address,
+          notes: dto.reason?.trim() || null,
+        },
+      });
+      await tx.license.update({
+        where: { id },
+        data: {
+          voidedAt: new Date(),
+          voidedById: userId,
+          voidReason: dto.reason?.trim() || null,
+          transferredToNenposClientId: nenposClient.id,
+        },
+      });
+      return [license, nenposClient] as const;
+    });
+
+    return { licenseId: id, nenposClient };
+  }
+
   /** Generate a TRIAL- key, retrying on the rare collision against the unique index. */
   private async generateUniqueTrialKey(): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -91,8 +174,9 @@ export class LicensesService {
     throw new InternalServerErrorException('Could not generate a unique trial license key');
   }
 
-  findAll() {
+  findAll(includeVoided = false) {
     return this.prisma.license.findMany({
+      where: includeVoided ? undefined : { voidedAt: null },
       orderBy: { createdAt: 'desc' },
       include: { client: true, product: true },
     });

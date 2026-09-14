@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
+import { SearchableClientSelect } from '../components/SearchableClientSelect';
 import { Pagination, usePagination } from '../components/Pagination';
 import { useAuthStore } from '../lib/auth-store';
-import type { Client, License, NenposClient, SoftwareProduct } from '../lib/types';
+import type { AuthenticatedUser, Client, License, NenposClient, SoftwareProduct } from '../lib/types';
 
 const EMPTY_FINGERPRINT_FORM = { cpu: '', disk: '', mac: '' };
 
@@ -229,9 +230,15 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
+const TRIAL_DAYS = 30;
+
+/** Shared form state for the secure void / transfer dialogs (password + typed confirmation phrase). */
+const EMPTY_SECURE_FORM = { password: '', confirmName: '', reason: '' };
+
 const EMPTY_NENPOS_FORM = {
   clientName: '', license: '', clientId: '', startDate: '', expiryDate: '',
   status: 'ACTIVE', installer: '', address: '', notes: '',
+  isTrial: false, installDate: '',
 };
 
 function NenposClientsTab() {
@@ -246,6 +253,19 @@ function NenposClientsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addForm, setAddForm] = useState(EMPTY_NENPOS_FORM);
   const [addError, setAddError] = useState('');
+  const [nameFocused, setNameFocused] = useState(false);
+
+  const clientsQuery = useQuery({
+    queryKey: ['clients'],
+    queryFn: async () => (await api.get<Client[]>('/clients')).data,
+    enabled: showAddForm,
+  });
+
+  const installersQuery = useQuery({
+    queryKey: ['users', 'INSTALLER'],
+    queryFn: async () => (await api.get<AuthenticatedUser[]>('/users', { params: { role: 'INSTALLER' } })).data,
+    enabled: showAddForm,
+  });
 
   const formPayload = () => ({
     clientName: addForm.clientName.trim(),
@@ -257,6 +277,11 @@ function NenposClientsTab() {
     installer: addForm.installer.trim() || undefined,
     address: addForm.address.trim() || undefined,
     notes: addForm.notes.trim() || undefined,
+    isTrial: addForm.isTrial,
+    installDate: addForm.installDate || undefined,
+    trialDays: TRIAL_DAYS,
+    // Trial expiry is derived server-side from install date + trial days.
+    ...(addForm.isTrial ? { expiryDate: undefined } : {}),
   });
 
   const closeForm = () => {
@@ -302,6 +327,8 @@ function NenposClientsTab() {
       installer: row.installer ?? '',
       address: row.address ?? '',
       notes: row.notes ?? '',
+      isTrial: row.isTrial ?? false,
+      installDate: row.installDate ? row.installDate.slice(0, 10) : '',
     });
     setAddError('');
     setShowAddForm(true);
@@ -454,8 +481,13 @@ function NenposClientsTab() {
                             </span>
                           </td>
                           <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{row.license ?? '—'}</td>
-                          <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.startDate)}</td>
-                          <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.expiryDate)}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.isTrial ? (row.installDate ?? row.startDate) : row.startDate)}</td>
+                          <td style={{ whiteSpace: 'nowrap', ...(row.expiryDate && new Date(row.expiryDate).getTime() < Date.now() ? { color: 'var(--danger)', fontWeight: 600 } : {}) }}>
+                            {fmtDate(row.expiryDate)}
+                            {row.expiryDate && new Date(row.expiryDate).getTime() < Date.now() && (
+                              <span style={{ display: 'block', fontSize: '0.75rem' }}>Expired</span>
+                            )}
+                          </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{row.installer ?? '—'}</td>
                           <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.address ?? ''}>
                             {row.address ?? '—'}
@@ -509,8 +541,65 @@ function NenposClientsTab() {
         <form onSubmit={(e) => { e.preventDefault(); submitForm(); }}>
           <div className="field">
             <label htmlFor="np-name">Client name *</label>
-            <input id="np-name" type="text" required value={addForm.clientName}
-              onChange={(e) => setAddForm({ ...addForm, clientName: e.target.value })} />
+            <div style={{ position: 'relative' }}>
+              <input id="np-name" type="text" required value={addForm.clientName}
+                autoComplete="off"
+                placeholder="Type to search the client directory…"
+                onChange={(e) => setAddForm({ ...addForm, clientName: e.target.value, clientId: '' })}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => setTimeout(() => setNameFocused(false), 150)}
+              />
+              {nameFocused && addForm.clientName.trim() && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 240, overflowY: 'auto',
+                }}>
+                  {(() => {
+                    const q = addForm.clientName.trim().toLowerCase();
+                    const matches = (clientsQuery.data ?? [])
+                      .filter((c) => `${c.businessName} ${c.clientCode}`.toLowerCase().includes(q))
+                      .slice(0, 8);
+                    if (matches.length === 0) {
+                      return (
+                        <div style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                          No matching client in the directory — a new NENPOS record will use this name.
+                        </div>
+                      );
+                    }
+                    return matches.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setAddForm((f) => ({
+                            ...f,
+                            clientName: c.businessName,
+                            clientId: c.clientCode,
+                            address: f.address || c.address || '',
+                          }));
+                          setNameFocused(false);
+                        }}
+                        style={{
+                          display: 'block', width: '100%', padding: '0.6rem 0.85rem', border: 0,
+                          borderBottom: '1px solid var(--border)', background: 'transparent',
+                          color: 'var(--text)', textAlign: 'left', cursor: 'pointer', fontSize: '0.875rem',
+                        }}
+                      >
+                        {c.businessName} <span style={{ color: 'var(--text-muted)' }}>({c.clientCode})</span>
+                        {c.address && (
+                          <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{c.address}</span>
+                        )}
+                      </button>
+                    ));
+                  })()}
+                </div>
+              )}
+            </div>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Type to auto-search the client directory — clicking a match fills the name, ID, and address.
+            </p>
           </div>
           <div className="field">
             <label htmlFor="np-license">License</label>
@@ -535,22 +624,66 @@ function NenposClientsTab() {
               </select>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <div className="field" style={{ flex: 1 }}>
-              <label htmlFor="np-start">Start date</label>
-              <input id="np-start" type="date" value={addForm.startDate}
-                onChange={(e) => setAddForm({ ...addForm, startDate: e.target.value })} />
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label htmlFor="np-expiry">Expiry date</label>
-              <input id="np-expiry" type="date" value={addForm.expiryDate}
-                onChange={(e) => setAddForm({ ...addForm, expiryDate: e.target.value })} />
+          <div className="field">
+            <label>License type</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button type="button"
+                className={`btn ${!addForm.isTrial ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1 }}
+                onClick={() => setAddForm({ ...addForm, isTrial: false })}
+              >
+                Full
+              </button>
+              <button type="button"
+                className={`btn ${addForm.isTrial ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1 }}
+                onClick={() => setAddForm({ ...addForm, isTrial: true })}
+              >
+                Trial
+              </button>
             </div>
           </div>
+          {addForm.isTrial ? (
+            <div className="field">
+              <label htmlFor="np-install-date">Install date</label>
+              <input id="np-install-date" type="date" value={addForm.installDate}
+                onChange={(e) => setAddForm({ ...addForm, installDate: e.target.value })} />
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Expiry is automatically {TRIAL_DAYS} days after the install date
+                {addForm.installDate && (() => {
+                  const d = new Date(`${addForm.installDate}T00:00:00`);
+                  if (isNaN(d.getTime())) return null;
+                  d.setDate(d.getDate() + TRIAL_DAYS);
+                  return <> — ends <strong>{d.toLocaleDateString()}</strong></>;
+                })()}.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label htmlFor="np-start">Start date</label>
+                <input id="np-start" type="date" value={addForm.startDate}
+                  onChange={(e) => setAddForm({ ...addForm, startDate: e.target.value })} />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label htmlFor="np-expiry">Expiry date</label>
+                <input id="np-expiry" type="date" value={addForm.expiryDate}
+                  onChange={(e) => setAddForm({ ...addForm, expiryDate: e.target.value })} />
+              </div>
+            </div>
+          )}
           <div className="field">
             <label htmlFor="np-installer">Installer</label>
-            <input id="np-installer" type="text" value={addForm.installer}
-              onChange={(e) => setAddForm({ ...addForm, installer: e.target.value })} />
+            <select id="np-installer" value={addForm.installer}
+              onChange={(e) => setAddForm({ ...addForm, installer: e.target.value })}>
+              <option value="">Select an installer…</option>
+              {(installersQuery.data ?? []).map((u) => (
+                <option key={u.id} value={u.fullName}>{u.fullName}</option>
+              ))}
+              {addForm.installer && !(installersQuery.data ?? []).some((u) => u.fullName === addForm.installer) && (
+                <option value={addForm.installer}>{addForm.installer} (from record)</option>
+                )}
+            </select>
           </div>
           <div className="field">
             <label htmlFor="np-address">Address</label>
@@ -585,8 +718,22 @@ function NenposClientsTab() {
             <DetailRow label="Client Name" value={<strong>{viewRecord.clientName}</strong>} />
             <DetailRow label="License" value={<span style={{ fontFamily: 'monospace' }}>{viewRecord.license ?? '—'}</span>} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <DetailRow label="Start Date" value={fmtDate(viewRecord.startDate)} />
-              <DetailRow label="Expiry Date" value={fmtDate(viewRecord.expiryDate)} />
+              <DetailRow label={viewRecord.isTrial ? 'Install Date' : 'Start Date'} value={fmtDate(viewRecord.isTrial ? (viewRecord.installDate ?? viewRecord.startDate) : viewRecord.startDate)} />
+              <DetailRow label="Expiry Date" value={
+                <span style={{
+                  ...(viewRecord.expiryDate && new Date(viewRecord.expiryDate).getTime() < Date.now()
+                    ? { color: 'var(--danger)', fontWeight: 600 }
+                    : {}),
+                }}>
+                  {fmtDate(viewRecord.expiryDate)}
+                  {viewRecord.expiryDate && new Date(viewRecord.expiryDate).getTime() < Date.now() && ' — Expired'}
+                  {viewRecord.isTrial && (
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: viewRecord.expiryDate && new Date(viewRecord.expiryDate).getTime() < Date.now() ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 400 }}>
+                      {viewRecord.trialDays ?? 30}-day trial{viewRecord.installDate ? ` from install ${fmtDate(viewRecord.installDate)}` : ' (install date not set)'}
+                    </span>
+                  )}
+                </span>
+              } />
             </div>
             <DetailRow label="Installer" value={viewRecord.installer ?? '—'} />
             <DetailRow label="Address" value={viewRecord.address ?? '—'} />
@@ -628,10 +775,11 @@ export function LicensesPage() {
   const [editError, setEditError] = useState('');
   const [licSearch, setLicSearch] = useState('');
   const [licStatus, setLicStatus] = useState('');
+  const [showVoided, setShowVoided] = useState(false); // must be declared before licensesQuery (TDZ)
 
   const licensesQuery = useQuery({
-    queryKey: ['licenses'],
-    queryFn: async () => (await api.get<License[]>('/licenses')).data,
+    queryKey: ['licenses', { includeVoided: showVoided }],
+    queryFn: async () => (await api.get<License[]>('/licenses', { params: showVoided ? { includeVoided: true } : undefined })).data,
   });
 
   const clientsQuery = useQuery({
@@ -647,6 +795,10 @@ export function LicensesPage() {
   });
 
   const [generateError, setGenerateError] = useState('');
+  const [transferringLicense, setTransferringLicense] = useState<License | null>(null);
+  const [transferForm, setTransferForm] = useState(EMPTY_SECURE_FORM);
+  const [transferError, setTransferError] = useState('');
+  const [transferSuccess, setTransferSuccess] = useState<{ clientName: string } | null>(null);
 
   const generateLicense = useMutation({
     mutationFn: async () => {
@@ -663,6 +815,32 @@ export function LicensesPage() {
     },
     onError: (err: any) => {
       setGenerateError(err?.response?.data?.message ?? 'Could not save the license. Try again.');
+    },
+  });
+
+  const transferMutation = useMutation({
+    mutationFn: async () => {
+      const license = transferringLicense!;
+      return (await api.post<{ licenseId: string; nenposClient: NenposClient }>(
+        `/licenses/${license.id}/transfer-to-nenpos`,
+        {
+          password: transferForm.password,
+          confirmName: transferForm.confirmName.trim(),
+          reason: transferForm.reason.trim() || undefined,
+        },
+      )).data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['licenses'] });
+      queryClient.invalidateQueries({ queryKey: ['nenpos-clients'] });
+      setTransferSuccess({ clientName: data.nenposClient.clientName });
+      setTransferringLicense(null);
+      setTransferForm(EMPTY_SECURE_FORM);
+      setTransferError('');
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message;
+      setTransferError(Array.isArray(message) ? message[0] : message ?? 'Transfer failed — nothing was changed.');
     },
   });
 
@@ -796,12 +974,7 @@ export function LicensesPage() {
               </div>
               <div className="field">
                 <label htmlFor="clientId">Client</label>
-                <select id="clientId" required value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                  <option value="">Select a client…</option>
-                  {clientsQuery.data?.map((c) => (
-                    <option key={c.id} value={c.id}>{c.businessName} ({c.clientCode})</option>
-                  ))}
-                </select>
+                <SearchableClientSelect id="clientId" clients={clientsQuery.data ?? []} value={clientId} onChange={setClientId} />
               </div>
               <div className="field">
                 <label htmlFor="productId">Software product</label>
@@ -948,12 +1121,7 @@ export function LicensesPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="edit-clientId">Client</label>
-                  <select id="edit-clientId" required value={editForm.clientId} onChange={(e) => setEditForm({ ...editForm, clientId: e.target.value })}>
-                    <option value="">Select a client…</option>
-                    {clientsQuery.data?.map((c) => (
-                      <option key={c.id} value={c.id}>{c.businessName} ({c.clientCode})</option>
-                    ))}
-                  </select>
+                  <SearchableClientSelect id="edit-clientId" clients={clientsQuery.data ?? []} value={editForm.clientId} onChange={(clientId) => setEditForm({ ...editForm, clientId })} />
                 </div>
                 <div className="field">
                   <label htmlFor="edit-productId">Software product</label>
@@ -1003,11 +1171,112 @@ export function LicensesPage() {
             )}
           </Dialog>
 
+          {/* Transfer to NENPOS dialog — SUPER_ADMIN secure action */}
+          <Dialog
+            isOpen={!!transferringLicense}
+            onClose={() => { setTransferringLicense(null); setTransferError(''); }}
+            title="Transfer to NENPOS"
+            maxWidth={520}
+          >
+            {transferringLicense && (
+              <form onSubmit={(e) => { e.preventDefault(); transferMutation.mutate(); }}>
+                <div style={{ padding: '0.75rem', background: 'var(--bg)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Transferring license for:</div>
+                  <div style={{ fontWeight: 600 }}>{transferringLicense.client?.businessName} — {transferringLicense.product?.productName}</div>
+                  <div style={{ fontFamily: 'monospace', marginTop: '0.3rem', color: 'var(--accent)', fontSize: '0.8rem' }}>{transferringLicense.licenseKey}</div>
+                </div>
+                <p style={{ marginTop: 0, marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  This copies the client, license key, and dates into a new row in the <strong>NENPOS Licenses</strong> tab,
+                  then voids this license so everything for this client lives in one place. The NENPOS-only fields
+                  (installer, notes) can be edited there afterward.
+                </p>
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem',
+                  padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 8, marginBottom: '1rem',
+                }}>
+                  <div><div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Client ID</div>{transferringLicense.client?.clientCode}</div>
+                  <div><div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</div>{transferringLicense.status}</div>
+                  <div><div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Installed</div>{transferringLicense.activationDate ? new Date(transferringLicense.activationDate).toLocaleDateString() : '—'}</div>
+                  <div><div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Expires</div>{transferringLicense.expirationDate ? new Date(transferringLicense.expirationDate).toLocaleDateString() : '—'}</div>
+                </div>
+                <div className="field">
+                  <label htmlFor="transfer-reason">Notes for the NENPOS record (optional)</label>
+                  <textarea
+                    id="transfer-reason"
+                    rows={2}
+                    value={transferForm.reason}
+                    onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="transfer-password">Your password *</label>
+                  <input
+                    id="transfer-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={transferForm.password}
+                    onChange={(e) => setTransferForm({ ...transferForm, password: e.target.value })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="transfer-confirm">Type <strong>{transferringLicense.client?.businessName}</strong> to authorize *</label>
+                  <input
+                    id="transfer-confirm"
+                    type="text"
+                    required
+                    autoComplete="off"
+                    value={transferForm.confirmName}
+                    onChange={(e) => setTransferForm({ ...transferForm, confirmName: e.target.value })}
+                    placeholder={transferringLicense.client?.businessName}
+                  />
+                  <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    This action cannot be undone from the app — the license stays voided and the data lives in NENPOS.
+                  </p>
+                </div>
+                {transferError && <p className="error-text">{transferError}</p>}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={transferMutation.isPending || !transferForm.password || transferForm.confirmName.trim().toLowerCase() !== (transferringLicense.client?.businessName ?? '').trim().toLowerCase()}
+                    style={{ flex: 1 }}
+                  >
+                    {transferMutation.isPending ? 'Transferring…' : 'Authorize transfer'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => { setTransferringLicense(null); setTransferError(''); }}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </Dialog>
+
           {/* Action bar */}
           {!isDeveloper && (
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
                 + Add License
+              </button>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showVoided}
+                  onChange={(e) => setShowVoided(e.target.checked)}
+                  style={{ width: 'auto', margin: 0, padding: 0 }}
+                />
+                Show voided/transferred
+              </label>
+            </div>
+          )}
+
+          {transferSuccess && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem',
+              padding: '0.75rem 1rem', background: 'rgba(22,163,74,0.1)', border: '1px solid var(--success)',
+              borderRadius: 8, color: 'var(--success)', marginBottom: '1rem', fontWeight: 600,
+            }}>
+              <span>✓ Transferred <strong>{transferSuccess.clientName}</strong> to the NENPOS Licenses tab. The license row is now voided.</span>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => setTransferSuccess(null)}>
+                Dismiss
               </button>
             </div>
           )}
@@ -1050,8 +1319,19 @@ export function LicensesPage() {
                           <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No licenses match your search.</td></tr>
                         ) : (
                           paginatedLicenses.map((license) => (
-                            <tr key={license.id}>
-                              <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{license.client?.businessName ?? '—'}</td>
+                            <tr key={license.id} style={{ opacity: license.voidedAt ? 0.55 : 1 }}>
+                              <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {license.client?.businessName ?? '—'}
+                                {license.voidedAt && (
+                                  <span className="badge" style={{
+                                    marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.5rem',
+                                    background: 'rgba(220,38,38,0.12)', color: 'var(--danger)',
+                                    border: '1px solid var(--danger)', borderRadius: 999,
+                                  }}>
+                                    {license.transferredToNenposClientId ? 'Transferred to NENPOS' : 'Voided'}
+                                  </span>
+                                )}
+                              </td>
                               <td style={{ whiteSpace: 'nowrap' }}>{license.product?.productName ?? '—'}</td>
                               <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                                 {license.licenseKey}
@@ -1061,13 +1341,25 @@ export function LicensesPage() {
                               <LicenseDateCells license={license} />
                               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                                 <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                                  {isDeveloper && license.status === 'PENDING' && (
+                                  {!isDeveloper && !license.voidedAt && (
+                                    <button type="button" className="btn btn-secondary"
+                                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                                      onClick={() => {
+                                        setTransferSuccess(null);
+                                        setTransferForm(EMPTY_SECURE_FORM);
+                                        setTransferError('');
+                                        setTransferringLicense(license);
+                                      }}>
+                                      Transfer
+                                    </button>
+                                  )}
+                                  {!license.voidedAt && isDeveloper && license.status === 'PENDING' && (
                                     <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
                                       onClick={() => setActivatingId(license.id)}>
                                       Activate
                                     </button>
                                   )}
-                                  {!isDeveloper && license.status === 'ACTIVATED' && (
+                                  {!isDeveloper && !license.voidedAt && license.status === 'ACTIVATED' && (
                                     <button type="button" className="btn btn-secondary"
                                       style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
                                       disabled={suspendLicense.isPending}
@@ -1075,7 +1367,7 @@ export function LicensesPage() {
                                       Suspend
                                     </button>
                                   )}
-                                  {!isDeveloper && (
+                                  {!isDeveloper && !license.voidedAt && (
                                     <button type="button" className="btn btn-secondary"
                                       style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
                                       onClick={() => openEdit(license)}>

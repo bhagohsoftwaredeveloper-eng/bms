@@ -142,6 +142,8 @@ export class AuditLogInterceptor implements NestInterceptor {
     if (url.includes('/pin-agreement')) {
       return method === 'DELETE' ? 'Unlocked Job Order Agreement' : 'Pinned Job Order Agreement';
     }
+    if (url.includes('/void')) return method === 'POST' ? 'Voided Record' : `void ${method}`;
+    if (url.includes('/transfer-to-nenpos')) return 'Transferred License to NENPOS';
 
     const parts = url.split('/').filter(p => p && p !== 'api');
     const resourcePath = parts[0] || 'unknown';

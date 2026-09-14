@@ -2,8 +2,10 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { read, utils } from 'xlsx';
 import { PrismaService } from './prisma.service';
+import { AuthService } from './auth.service';
 import { CreateNenposClientDto } from './create-nenpos-client.dto';
 import { UpdateNenposClientDto } from './update-nenpos-client.dto';
+import { VoidTransferActionDto } from './void-transfer-action.dto';
 
 interface ExcelRow {
   'Client ID'?: unknown;
@@ -48,10 +50,14 @@ function generateClientId(): string {
 
 @Injectable()
 export class NenposClientsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auth: AuthService,
+  ) {}
 
-  findAll() {
+  findAll(includeVoided = false) {
     return this.prisma.nenposClient.findMany({
+      where: includeVoided ? undefined : { voidedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -60,17 +66,31 @@ export class NenposClientsService {
     const clientName = dto.clientName?.trim();
     if (!clientName) throw new BadRequestException('Client Name is required.');
 
+    const isTrial = dto.isTrial ?? false;
+    const installDate = dto.installDate ? new Date(dto.installDate) : null;
+
     return this.prisma.nenposClient.create({
       data: {
         clientId: dto.clientId?.trim() || generateClientId(),
         clientName,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
-        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
         license: dto.license?.trim() || null,
         status: dto.status?.trim() || 'ACTIVE',
         installer: dto.installer?.trim() || null,
         notes: dto.notes?.trim() || null,
         address: dto.address?.trim() || null,
+        isTrial,
+        installDate,
+        trialDays: dto.trialDays ?? 30,
+        // Trial: expiry is derived from install date + trial days.
+        expiryDate:
+          isTrial && installDate
+            ? new Date(installDate.getTime() + (dto.trialDays ?? 30) * 86_400_000)
+            : isTrial
+              ? null
+              : dto.expiryDate
+                ? new Date(dto.expiryDate)
+                : null,
       },
     });
   }
@@ -122,9 +142,59 @@ export class NenposClientsService {
     if (dto.address !== undefined) data.address = dto.address.trim() || null;
     if (dto.notes !== undefined) data.notes = dto.notes.trim() || null;
     if (dto.startDate !== undefined) data.startDate = dto.startDate ? new Date(dto.startDate) : null;
-    if (dto.expiryDate !== undefined) data.expiryDate = dto.expiryDate ? new Date(dto.expiryDate) : null;
+
+    const isTrial = dto.isTrial ?? existing.isTrial;
+    const trialDays = dto.trialDays ?? existing.trialDays;
+    const installDate =
+      dto.installDate !== undefined
+        ? dto.installDate
+          ? new Date(dto.installDate)
+          : null
+        : existing.installDate;
+
+    data.isTrial = isTrial;
+    data.installDate = installDate;
+    data.trialDays = trialDays;
+    // Trial: expiry is derived from install date + trial days. Non-trial keeps a manual expiry.
+    if (isTrial) {
+      data.expiryDate = installDate
+        ? new Date(installDate.getTime() + trialDays * 86_400_000)
+        : dto.expiryDate !== undefined
+          ? dto.expiryDate
+            ? new Date(dto.expiryDate)
+            : null
+          : existing.expiryDate;
+    } else if (dto.expiryDate !== undefined) {
+      data.expiryDate = dto.expiryDate ? new Date(dto.expiryDate) : null;
+    }
 
     return this.prisma.nenposClient.update({ where: { id }, data });
+  }
+
+  /**
+   * Secure void: soft-delete a NENPOS client record. When called from the
+   * NENPOS → Bhagoh transfer finish step, transferredToLicenseId links the
+   * voided row to its destination license so it shows as "Transferred".
+   */
+  async void(id: string, userId: string, dto: VoidTransferActionDto) {
+    await this.auth.verifyPassword(userId, dto.password);
+
+    const record = await this.prisma.nenposClient.findUnique({ where: { id } });
+    if (!record) throw new NotFoundException(`NENPOS client ${id} not found`);
+    if (record.voidedAt) throw new BadRequestException('This record was already voided/transferred.');
+    if (dto.confirmName.trim().toLowerCase() !== record.clientName.trim().toLowerCase()) {
+      throw new BadRequestException("Name doesn't match — nothing was changed.");
+    }
+
+    return this.prisma.nenposClient.update({
+      where: { id },
+      data: {
+        voidedAt: new Date(),
+        voidedById: userId,
+        voidReason: dto.reason?.trim() || null,
+        transferredToLicenseId: dto.transferredToLicenseId?.trim() || null,
+      },
+    });
   }
 
   delete(id: string) {

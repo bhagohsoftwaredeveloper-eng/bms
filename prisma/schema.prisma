@@ -162,6 +162,8 @@ model User {
   // Relations
   installerJobs     Job[]                @relation("InstallerJobs")
   developerLicenses License[]            @relation("DeveloperActivations")
+  licensesVoided    License[]            @relation("LicenseVoidedBy")
+  nenposVoided      NenposClient[]       @relation("NenposClientVoidedBy")
   earnings          Earning[]
   withdrawals       Withdrawal[]
   auditLogs         AuditLog[]
@@ -264,9 +266,16 @@ model License {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Secure void / transfer audit trail (spec: 2026-09-11-license-nenpos-void-transfer)
+  voidedAt                    DateTime? @map("voided_at")
+  voidedById                  String?   @map("voided_by_id")
+  voidReason                  String?   @map("void_reason") @db.Text
+  transferredToNenposClientId String?   @map("transferred_to_nenpos_client_id")
+
   client      Client          @relation(fields: [clientId], references: [id])
   product     SoftwareProduct @relation(fields: [productId], references: [id])
   activatedBy User?           @relation("DeveloperActivations", fields: [activatedById], references: [id])
+  voidedBy    User?           @relation("LicenseVoidedBy", fields: [voidedById], references: [id])
   jobs        Job[]
 
   @@map("licenses")
@@ -791,16 +800,29 @@ model DevProjectReport {
 // ---------------------------------------------------------------------------
 
 model NenposClient {
-  id         String    @id @default(uuid())
-  clientId   String    @map("client_id")
-  clientName String    @map("client_name")
-  startDate  DateTime? @map("start_date")
-  expiryDate DateTime? @map("expiry_date")
-  license    String?
-  status     String    @default("ACTIVE")
-  installer  String?
-  notes      String?   @db.Text
-  address    String?   @db.Text
+  id          String    @id @default(uuid())
+  clientId    String    @map("client_id")
+  clientName  String    @map("client_name")
+  startDate   DateTime? @map("start_date")
+  expiryDate  DateTime? @map("expiry_date")
+  license     String?
+  status      String    @default("ACTIVE")
+  installer   String?
+  notes       String?   @db.Text
+  address     String?   @db.Text
+
+  // Trial licensing: install date drives the expiry (install + trialDays).
+  isTrial     Boolean   @default(false) @map("is_trial")
+  installDate DateTime? @map("install_date")
+  trialDays   Int       @default(30) @map("trial_days")
+
+  // Secure void / transfer audit trail (spec: 2026-09-11-license-nenpos-void-transfer)
+  voidedAt                DateTime? @map("voided_at")
+  voidedById              String?   @map("voided_by_id")
+  voidReason              String?   @map("void_reason") @db.Text
+  transferredToLicenseId  String?   @map("transferred_to_license_id")
+
+  voidedBy User? @relation("NenposClientVoidedBy", fields: [voidedById], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
