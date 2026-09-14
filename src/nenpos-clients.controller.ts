@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,10 +16,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { Roles } from './roles.decorator';
+import type { AuthenticatedUser } from './authenticated-user.type';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { CurrentUser } from './current-user.decorator';
 import { CreateNenposClientDto } from './create-nenpos-client.dto';
 import { UpdateNenposClientDto } from './update-nenpos-client.dto';
+import { VoidTransferActionDto } from './void-transfer-action.dto';
 import { NenposClientsService } from './nenpos-clients.service';
 
 const ALLOWED_MIME = new Set([
@@ -34,8 +38,8 @@ export class NenposClientsController {
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Query('includeVoided') includeVoided?: string) {
+    return this.service.findAll(includeVoided === 'true');
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
@@ -80,5 +84,12 @@ export class NenposClientsController {
   @Delete()
   clearAll() {
     return this.service.deleteAll();
+  }
+
+  /** Secure void: soft-delete a NENPOS client record (SUPER_ADMIN only). */
+  @Roles(UserRole.SUPER_ADMIN)
+  @Post(':id/void')
+  void(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: VoidTransferActionDto) {
+    return this.service.void(id, user.id, dto);
   }
 }

@@ -63,6 +63,9 @@ export interface License {
   expirationDate: string | null;
   isTrial: boolean;
   trialDays: number | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  transferredToNenposClientId: string | null;
   client?: Client;
   product?: SoftwareProduct;
 }
@@ -353,6 +356,12 @@ export interface NenposClient {
   installer: string | null;
   notes: string | null;
   address: string | null;
+  isTrial: boolean;
+  installDate: string | null;
+  trialDays: number;
+  voidedAt: string | null;
+  voidReason: string | null;
+  transferredToLicenseId: string | null;
   uploadedAt: string;
   uploadedBy: string | null;
 }

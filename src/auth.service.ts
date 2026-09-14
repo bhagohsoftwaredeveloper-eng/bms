@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { JwtSignOptions } from '@nestjs/jwt';
@@ -18,6 +18,14 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
+
+  /** Re-check the acting user's own login password for sensitive actions (void/transfer/reset). */
+  async verifyPassword(userId: string, password: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const matches = await bcrypt.compare(password, user.passwordHash);
+    if (!matches) throw new UnauthorizedException('Incorrect password — nothing was changed.');
+  }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
