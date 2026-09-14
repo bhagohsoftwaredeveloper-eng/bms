@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
+import { SearchableClientSelect } from '../components/SearchableClientSelect';
 import { Pagination, usePagination } from '../components/Pagination';
 import { useAuthStore } from '../lib/auth-store';
 import type { Client, License, NenposClient, SoftwareProduct } from '../lib/types';
@@ -796,12 +797,7 @@ export function LicensesPage() {
               </div>
               <div className="field">
                 <label htmlFor="clientId">Client</label>
-                <select id="clientId" required value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                  <option value="">Select a client…</option>
-                  {clientsQuery.data?.map((c) => (
-                    <option key={c.id} value={c.id}>{c.businessName} ({c.clientCode})</option>
-                  ))}
-                </select>
+                <SearchableClientSelect id="clientId" clients={clientsQuery.data ?? []} value={clientId} onChange={setClientId} />
               </div>
               <div className="field">
                 <label htmlFor="productId">Software product</label>
@@ -948,12 +944,7 @@ export function LicensesPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="edit-clientId">Client</label>
-                  <select id="edit-clientId" required value={editForm.clientId} onChange={(e) => setEditForm({ ...editForm, clientId: e.target.value })}>
-                    <option value="">Select a client…</option>
-                    {clientsQuery.data?.map((c) => (
-                      <option key={c.id} value={c.id}>{c.businessName} ({c.clientCode})</option>
-                    ))}
-                  </select>
+                  <SearchableClientSelect id="edit-clientId" clients={clientsQuery.data ?? []} value={editForm.clientId} onChange={(clientId) => setEditForm({ ...editForm, clientId })} />
                 </div>
                 <div className="field">
                   <label htmlFor="edit-productId">Software product</label>
