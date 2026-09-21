@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
@@ -241,6 +241,54 @@ const EMPTY_NENPOS_FORM = {
   isTrial: false, installDate: '',
 };
 
+/** Groups start collapsed; an active search/filter forces them open so matches stay visible. */
+function useExpandedGroups(forceExpanded: boolean) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const isExpanded = (key: string) => forceExpanded || expanded.has(key);
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  return { isExpanded, toggle };
+}
+
+function GroupHeaderRow({ colSpan, title, subtitle, count, expanded, onToggle, action }: {
+  colSpan: number;
+  title: string;
+  subtitle?: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  action?: ReactNode;
+}) {
+  return (
+    <tr style={{ background: 'var(--bg)' }}>
+      <td colSpan={colSpan}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'left', fontWeight: 700, color: 'var(--accent)' }}
+          >
+            <span style={{ display: 'inline-block', width: '1.1rem' }}>{expanded ? '▾' : '▸'}</span>
+            {title}
+            {subtitle && (
+              <span style={{ marginLeft: '0.5rem', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>{subtitle}</span>
+            )}
+            <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+              {count} license{count !== 1 ? 's' : ''}
+            </span>
+          </button>
+          {action}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function NenposClientsTab() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -377,7 +425,20 @@ function NenposClientsTab() {
     return matchSearch && matchStatus;
   });
 
-  const { paginated, page, pageSize, totalPages, total, start, changePage, changePageSize, reset } = usePagination(filtered);
+  const groupedRecords = filtered.reduce<Array<{ key: string; clientName: string; clientId: string; rows: NenposClient[] }>>((groups, row) => {
+    const key = row.clientName.trim().toLowerCase();
+    const existing = groups.find((group) => group.key === key);
+    if (existing) {
+      existing.rows.push(row);
+      if (!existing.clientId && row.clientId) existing.clientId = row.clientId;
+    } else {
+      groups.push({ key, clientName: row.clientName, clientId: row.clientId ?? '', rows: [row] });
+    }
+    return groups;
+  }, []);
+
+  const { paginated, page, pageSize, totalPages, total, start, changePage, changePageSize, reset } = usePagination(groupedRecords);
+  const { isExpanded, toggle } = useExpandedGroups(!!search || !!statusFilter);
 
   useEffect(() => {
     reset();
@@ -457,7 +518,6 @@ function NenposClientsTab() {
                   <thead>
                     <tr>
                       <th>Client ID</th>
-                      <th>Client Name</th>
                       <th>Status</th>
                       <th>License</th>
                       <th>Start Date</th>
@@ -469,12 +529,33 @@ function NenposClientsTab() {
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
-                      <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No records match your search.</td></tr>
+                      <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No records match your search.</td></tr>
                     ) : (
-                      paginated.map((row) => (
+                      paginated.flatMap((group) => [
+                        <GroupHeaderRow
+                          key={`group-${group.key}`}
+                          colSpan={8}
+                          title={group.clientName}
+                          subtitle={group.clientId || undefined}
+                          count={group.rows.length}
+                          expanded={isExpanded(group.key)}
+                          onToggle={() => toggle(group.key)}
+                          action={(
+                            <button type="button" className="btn btn-secondary"
+                              style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                              onClick={() => {
+                                setEditingId(null);
+                                setAddForm({ ...EMPTY_NENPOS_FORM, clientName: group.clientName, clientId: group.clientId });
+                                setAddError('');
+                                setShowAddForm(true);
+                              }}>
+                              + Add license
+                            </button>
+                          )}
+                        />,
+                        ...(isExpanded(group.key) ? group.rows.map((row) => (
                         <tr key={row.id}>
-                          <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{row.clientId || '—'}</td>
-                          <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{row.clientName}</td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingLeft: '1.6rem' }}>{row.clientId || '—'}</td>
                           <td>
                             <span className={`badge badge-${(row.status ?? 'active').toLowerCase()}`}>
                               {row.status ?? '—'}
@@ -513,7 +594,8 @@ function NenposClientsTab() {
                             </div>
                           </td>
                         </tr>
-                      ))
+                        )) : []),
+                      ])
                     )}
                   </tbody>
                 </table>
@@ -776,6 +858,7 @@ export function LicensesPage() {
   const [licSearch, setLicSearch] = useState('');
   const [licStatus, setLicStatus] = useState('');
   const [showVoided, setShowVoided] = useState(false); // must be declared before licensesQuery (TDZ)
+  const { isExpanded, toggle: toggleClient } = useExpandedGroups(!!licSearch || !!licStatus);
 
   const licensesQuery = useQuery({
     queryKey: ['licenses', { includeVoided: showVoided }],
@@ -902,8 +985,22 @@ export function LicensesPage() {
     return matchSearch && matchStatus;
   });
 
+  const groupedLicenses = filteredLicenses.reduce<Array<{ clientId: string; clientName: string; licenses: License[] }>>((groups, license) => {
+    const existing = groups.find((group) => group.clientId === license.clientId);
+    if (existing) {
+      existing.licenses.push(license);
+    } else {
+      groups.push({
+        clientId: license.clientId,
+        clientName: license.client?.businessName ?? 'Unknown client',
+        licenses: [license],
+      });
+    }
+    return groups;
+  }, []);
+
   const {
-    paginated: paginatedLicenses,
+    paginated: paginatedClientGroups,
     page: licPage,
     pageSize: licPageSize,
     totalPages: licTotalPages,
@@ -912,7 +1009,7 @@ export function LicensesPage() {
     changePage: changeLicPage,
     changePageSize: changeLicPageSize,
     reset: resetLicPagination
-  } = usePagination(filteredLicenses);
+  } = usePagination(groupedLicenses);
 
   useEffect(() => {
     resetLicPagination();
@@ -1253,7 +1350,7 @@ export function LicensesPage() {
           {/* Action bar */}
           {!isDeveloper && (
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
+              <button type="button" className="btn btn-primary" onClick={() => { setClientId(''); setShowForm(true); }}>
                 + Add License
               </button>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
@@ -1305,7 +1402,7 @@ export function LicensesPage() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Client</th>
+                          <th>Computer</th>
                           <th>Product</th>
                           <th>License Key</th>
                           <th>Status</th>
@@ -1315,13 +1412,31 @@ export function LicensesPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedLicenses.length === 0 ? (
+                        {paginatedClientGroups.length === 0 ? (
                           <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No licenses match your search.</td></tr>
                         ) : (
-                          paginatedLicenses.map((license) => (
+                          paginatedClientGroups.flatMap((group) => [
+                            <GroupHeaderRow
+                              key={`client-${group.clientId}`}
+                              colSpan={7}
+                              title={group.clientName}
+                              count={group.licenses.length}
+                              expanded={isExpanded(group.clientId)}
+                              onToggle={() => toggleClient(group.clientId)}
+                              action={!isDeveloper && (
+                                <button type="button" className="btn btn-secondary"
+                                  style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                                  onClick={() => { setClientId(group.clientId); setShowForm(true); }}>
+                                  + Add license
+                                </button>
+                              )}
+                            />,
+                            ...(!isExpanded(group.clientId) ? [] : group.licenses.map((license) => (
                             <tr key={license.id} style={{ opacity: license.voidedAt ? 0.55 : 1 }}>
-                              <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                {license.client?.businessName ?? '—'}
+                              <td style={{ fontWeight: 600, whiteSpace: 'nowrap', paddingLeft: '1.6rem' }}>
+                                {license.hardwareFingerprint?.mac ?? (
+                                  <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>Not activated yet</span>
+                                )}
                                 {license.voidedAt && (
                                   <span className="badge" style={{
                                     marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.5rem',
@@ -1382,7 +1497,8 @@ export function LicensesPage() {
                                 </div>
                               </td>
                             </tr>
-                          ))
+                            ))),
+                          ])
                         )}
                       </tbody>
                     </table>

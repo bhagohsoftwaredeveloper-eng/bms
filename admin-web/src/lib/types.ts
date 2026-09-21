@@ -66,6 +66,7 @@ export interface License {
   voidedAt: string | null;
   voidReason: string | null;
   transferredToNenposClientId: string | null;
+  hardwareFingerprint?: { cpu?: string; disk?: string; mac?: string } | null;
   client?: Client;
   product?: SoftwareProduct;
 }
