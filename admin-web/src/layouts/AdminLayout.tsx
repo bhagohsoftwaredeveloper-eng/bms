@@ -650,6 +650,7 @@ export function AdminLayout() {
         </header>
 
         <main
+          className="app-main"
           style={{
             flex: 1,
             padding: isMobile ? '1.25rem 1rem' : '2rem 2.5rem',

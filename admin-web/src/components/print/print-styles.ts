@@ -3,6 +3,18 @@ export const PRINT_STYLE = `
   body * { visibility: hidden; }
   #job-order-print, #job-order-print * { visibility: visible; }
   /*
+   * #job-order-print's containing block is #root (position: relative), and
+   * everything between them stays in the DOM (only visibility is toggled
+   * above, layout is untouched). The dashboard's <main> is an overflow:auto
+   * scroll pane, so without this it clips the absolutely-positioned print
+   * subtree to whatever fit on screen at print time — the rest of a
+   * multi-page job order/agreement silently vanished instead of paginating.
+   */
+  .app-main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  /*
    * Absolute, not fixed. In paged media a fixed box is REPEATED on every page
    * by design, so the whole job order was being painted again on top of the
    * agreement once the output grew past one page. Absolute positioning takes
