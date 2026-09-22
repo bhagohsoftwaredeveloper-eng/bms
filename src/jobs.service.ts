@@ -28,21 +28,30 @@ export class JobsService {
   async create(dto: CreateJobDto) {
     const installerIds = dto.installerIds ?? [];
     const primaryInstallerId = installerIds[0];
-    const job = await this.prisma.job.create({
-      data: {
-        clientId: dto.clientId,
-        installerId: primaryInstallerId,
-        licenseId: dto.licenseId,
-        scheduleDate: dto.scheduleDate,
-        remarks: dto.remarks,
-        jobStatus: primaryInstallerId ? JobStatus.ASSIGNED : undefined,
-      },
-      include: { client: true },
-    });
-    if (installerIds.length > 0) {
-      await this.prisma.jobInstaller.createMany({
-        data: installerIds.map((userId) => ({ jobId: job.id, userId })),
+    // The job row and its roster must land together: a job row without its
+    // JobInstaller rows is a half-assigned job.
+    const job = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.job.create({
+        data: {
+          clientId: dto.clientId,
+          installerId: primaryInstallerId,
+          licenseId: dto.licenseId,
+          scheduleDate: dto.scheduleDate,
+          remarks: dto.remarks,
+          jobStatus: primaryInstallerId ? JobStatus.ASSIGNED : undefined,
+        },
+        include: { client: true },
       });
+      if (installerIds.length > 0) {
+        await tx.jobInstaller.createMany({
+          data: installerIds.map((userId) => ({ jobId: created.id, userId })),
+          skipDuplicates: true,
+        });
+      }
+      return created;
+    });
+
+    if (installerIds.length > 0) {
       await this.notifyAssignment(job.id, installerIds, job.client.businessName);
     }
     return job;
@@ -109,7 +118,10 @@ export class JobsService {
       });
       await tx.jobInstaller.deleteMany({ where: { jobId } });
       if (installerIds.length > 0) {
-        await tx.jobInstaller.createMany({ data: installerIds.map((userId) => ({ jobId, userId })) });
+        await tx.jobInstaller.createMany({
+          data: installerIds.map((userId) => ({ jobId, userId })),
+          skipDuplicates: true,
+        });
       }
       return updated;
     });

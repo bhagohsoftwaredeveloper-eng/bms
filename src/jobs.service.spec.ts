@@ -5,22 +5,29 @@ function makePrisma(overrides: { job?: unknown } = {}) {
     ? overrides.job
     : { id: 'job-1', clientId: 'client-1', installerId: 'old-installer', client: { businessName: 'Acme' } };
 
+  const assigned = { ...(job as Record<string, unknown>), installerId: 'installer-1' };
+
   // The transaction body runs against this fixed set of tx-scoped mocks, so
-  // tests can assert on exactly what setInstallers sent inside the transaction.
-  const txJobUpdate = jest.fn().mockResolvedValue({ ...job, installerId: 'installer-1' });
+  // tests can assert on exactly what setInstallers/create sent inside the
+  // transaction.
+  const txJobUpdate = jest.fn().mockResolvedValue(assigned);
+  const txJobCreate = jest.fn().mockResolvedValue(assigned);
   const txDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
   const txCreateMany = jest.fn().mockResolvedValue({ count: 0 });
 
   return {
     job: {
-      create: jest.fn().mockResolvedValue({ ...job, installerId: 'installer-1' }),
-      update: jest.fn().mockResolvedValue({ ...job, installerId: 'installer-1' }),
+      create: jest.fn().mockResolvedValue(assigned),
+      update: jest.fn().mockResolvedValue(assigned),
       findUnique: jest.fn().mockResolvedValue(job),
       findMany: jest.fn().mockResolvedValue([]),
     },
-    tx: { jobUpdate: txJobUpdate, deleteMany: txDeleteMany, createMany: txCreateMany },
+    tx: { jobUpdate: txJobUpdate, jobCreate: txJobCreate, deleteMany: txDeleteMany, createMany: txCreateMany },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) =>
-      fn({ job: { update: txJobUpdate }, jobInstaller: { deleteMany: txDeleteMany, createMany: txCreateMany } }),
+      fn({
+        job: { update: txJobUpdate, create: txJobCreate },
+        jobInstaller: { deleteMany: txDeleteMany, createMany: txCreateMany },
+      }),
     ),
   };
 }
@@ -47,6 +54,7 @@ describe('JobsService.assignInstaller', () => {
     expect(prisma.tx.deleteMany).toHaveBeenCalledWith({ where: { jobId: 'job-1' } });
     expect(prisma.tx.createMany).toHaveBeenCalledWith({
       data: [{ jobId: 'job-1', userId: 'installer-1' }, { jobId: 'job-1', userId: 'installer-2' }],
+      skipDuplicates: true,
     });
     expect(deps.notifications.notify).toHaveBeenCalledTimes(2);
     expect(deps.notifications.notify).toHaveBeenCalledWith(
@@ -55,6 +63,33 @@ describe('JobsService.assignInstaller', () => {
     expect(deps.notifications.notify).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'installer-2' }),
     );
+  });
+});
+
+describe('JobsService.create', () => {
+  it('sets installerId to the first id and writes a JobInstaller row per id, in one transaction', async () => {
+    const prisma = makePrisma();
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await service.create({
+      clientId: 'client-1',
+      installerIds: ['a', 'b'],
+      scheduleDate: new Date('2026-01-01'),
+    } as never);
+
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(prisma.tx.jobCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ installerId: 'a', jobStatus: 'ASSIGNED' }),
+      }),
+    );
+    expect(prisma.tx.createMany).toHaveBeenCalledWith({
+      data: [{ jobId: 'job-1', userId: 'a' }, { jobId: 'job-1', userId: 'b' }],
+      skipDuplicates: true,
+    });
+    // The plain (non-tx) client must not be used for either write.
+    expect(prisma.job.create).not.toHaveBeenCalled();
   });
 });
 
@@ -76,6 +111,22 @@ describe('JobsService.update', () => {
       where: { id: 'job-1' },
       data: { installerId: 'installer-1' },
     });
+  });
+
+  it('unassigns everyone when installerIds is empty: installerId null and every roster row deleted', async () => {
+    const job = { id: 'job-1', clientId: 'client-1', installerId: 'installer-1', client: { businessName: 'Acme' }, jobStatus: 'ASSIGNED' };
+    const prisma = makePrisma({ job });
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await service.update('job-1', { clientId: 'client-1', installerIds: [], scheduleDate: new Date('2026-01-01') } as never);
+
+    expect(prisma.tx.jobUpdate).toHaveBeenCalledWith({
+      where: { id: 'job-1' },
+      data: { installerId: null },
+    });
+    expect(prisma.tx.deleteMany).toHaveBeenCalledWith({ where: { jobId: 'job-1' } });
+    expect(prisma.tx.createMany).not.toHaveBeenCalled();
   });
 });
 
