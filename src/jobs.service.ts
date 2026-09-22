@@ -52,7 +52,12 @@ export class JobsService {
     const where: Prisma.JobWhereInput = {};
     if (userId) {
       if (role === 'INSTALLER') {
-        where.installers = { some: { userId } };
+        // Also match legacy/gap jobs that have a primary installerId but no
+        // roster rows yet, so they stay visible to their installer.
+        where.OR = [
+          { installers: { some: { userId } } },
+          { installerId: userId, installers: { none: {} } },
+        ];
       }
     }
 

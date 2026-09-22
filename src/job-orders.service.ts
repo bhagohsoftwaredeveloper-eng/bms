@@ -152,6 +152,13 @@ export class JobOrdersService {
         },
       });
 
+      // Keep the JobInstaller roster in sync with the primary installer —
+      // without it the job is invisible to its installer in GET /jobs and the
+      // admin edit form opens with nothing checked (silently unassigning).
+      if (dto.installerId) {
+        await tx.jobInstaller.create({ data: { jobId: job.id, userId: dto.installerId } });
+      }
+
       return tx.jobOrder.update({
         where: { id },
         data: { jobId: job.id, docType: DocType.JOB_ORDER },

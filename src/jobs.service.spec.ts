@@ -79,6 +79,37 @@ describe('JobsService.update', () => {
   });
 });
 
+describe('JobsService.findAll', () => {
+  it('matches jobs where the installer is on the roster OR is a legacy-gap primary installer', async () => {
+    const prisma = makePrisma();
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await service.findAll('user-1', 'INSTALLER');
+
+    expect(prisma.job.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [
+            { installers: { some: { userId: 'user-1' } } },
+            { installerId: 'user-1', installers: { none: {} } },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('does not scope the query for a non-installer role', async () => {
+    const prisma = makePrisma();
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await service.findAll('user-1', 'ADMIN');
+
+    expect(prisma.job.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }));
+  });
+});
+
 describe('JobsService.assertOwnedByInstaller (via submitProof)', () => {
   function makeProofPrisma(installers: { userId: string }[]) {
     const job = {

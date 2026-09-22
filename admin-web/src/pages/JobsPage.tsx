@@ -126,7 +126,14 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const openEditForm = (job: Job) => {
     setEditForm({
       clientId: job.clientId,
-      installerIds: job.installers?.map((row) => row.user.id) ?? (job.installerId ? [job.installerId] : []),
+      // An explicit length check, not `??`: a job assigned before it had a
+      // roster (e.g. via job-order conversion) has installers: [] rather than
+      // undefined, and `??` would leave the form empty and silently unassign it.
+      installerIds: job.installers && job.installers.length > 0
+        ? job.installers.map((row) => row.user.id)
+        : job.installerId
+          ? [job.installerId]
+          : [],
       scheduleDate: String(job.scheduleDate).slice(0, 10),
       remarks: job.remarks ?? '',
     });
@@ -361,7 +368,9 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onEdit, 
                   <td>
                     {job.installers && job.installers.length > 0
                       ? job.installers.map((row) => row.user.fullName).join(', ')
-                      : <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>}
+                      : job.installer
+                        ? job.installer.fullName
+                        : <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>}
                   </td>
                   <td>{new Date(job.scheduleDate).toLocaleDateString()}</td>
                   <td>
