@@ -244,6 +244,7 @@ export function AgreementTemplatePage() {
       {!readOnly && (
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1.25rem', flexWrap: 'wrap' }}>
           <input
+            className="input"
             value={note}
             placeholder="What changed? (optional)"
             style={{ flex: 1, minWidth: 220 }}
