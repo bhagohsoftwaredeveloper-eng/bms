@@ -1,6 +1,8 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { EarningStatus, EarningType, IncentiveStatus, JobOrderStatus, UserRole } from '@prisma/client';
+import { PayrollService } from './payroll.service';
 import { PrismaService } from './prisma.service';
+import { WithdrawalsService } from './withdrawals.service';
 import type { CreateKpiDefinitionDto } from './create-kpi-definition.dto';
 import type { GenerateIncentivesDto } from './generate-incentives.dto';
 import type { ManualKpiDto } from './manual-kpi.dto';
@@ -110,7 +112,13 @@ const INCENTIVE_TO_EARNING_STATUS: Record<IncentiveStatus, EarningStatus> = {
 
 @Injectable()
 export class KpisService implements OnModuleInit {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(KpisService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly payroll: PayrollService,
+    private readonly withdrawals: WithdrawalsService,
+  ) {}
 
   // Seed kpi_definitions for each role once at startup, sequentially, so
   // concurrent requests (e.g. getTeam's Promise.all) never race to seed
@@ -233,10 +241,13 @@ export class KpisService implements OnModuleInit {
       select: { id: true, fullName: true, role: true, baseBonus: true },
     });
 
+    // What each member can currently withdraw (approved earnings minus withdrawals).
+    const balances = await this.withdrawals.computeAvailableBalances(users.map((u) => u.id));
+
     const results = await Promise.all(
       users.map(async (u) => {
         const d = await this.getDashboard(u.id, u.role, month, year, Number(u.baseBonus));
-        return { userId: u.id, fullName: u.fullName, role: u.role, ...d };
+        return { userId: u.id, fullName: u.fullName, role: u.role, ...d, availableBalance: balances.get(u.id) ?? 0 };
       }),
     );
 
@@ -358,6 +369,11 @@ export class KpisService implements OnModuleInit {
   // ── Incentive generation ───────────────────────────────────────────────────
 
   async generateIncentives(dto: GenerateIncentivesDto) {
+    // Use the latest payroll rates; if payroll is unreachable, fall back to the stored base bonus.
+    await this.payroll.syncLinkedBaseBonuses().catch((err) => {
+      this.logger.warn(`Payroll sync skipped: ${err instanceof Error ? err.message : String(err)}`);
+    });
+
     const users = await this.prisma.user.findMany({
       where: { role: { in: KPI_ROLES }, isActive: true },
       select: { id: true, role: true, baseBonus: true },

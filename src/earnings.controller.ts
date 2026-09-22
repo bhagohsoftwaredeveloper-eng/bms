@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { EarningStatus, UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from './authenticated-user.type';
 import { CurrentUser } from './current-user.decorator';
@@ -7,6 +7,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { CreateEarningDto } from './create-earning.dto';
 import { EarningsService } from './earnings.service';
+import { UpdateInstallationRatesDto } from './update-installation-rates.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('earnings')
@@ -17,6 +18,18 @@ export class EarningsController {
   @Post()
   create(@Body() dto: CreateEarningDto) {
     return this.earningsService.create(dto);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
+  @Get('installation-rates')
+  getInstallationRates() {
+    return this.earningsService.getInstallationRates();
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Put('installation-rates')
+  saveInstallationRates(@Body() dto: UpdateInstallationRatesDto) {
+    return this.earningsService.saveInstallationRates(dto);
   }
 
   @Get()

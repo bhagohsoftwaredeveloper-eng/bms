@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class UpdateUserDto {
@@ -27,4 +27,10 @@ export class UpdateUserDto {
   @IsNumber()
   @Min(0)
   baseBonus?: number;
+
+  // null unlinks the user from payroll; a number links them and pulls their daily rate.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  payrollEmployeeId?: number | null;
 }

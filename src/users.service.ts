@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { PayrollService } from './payroll.service';
 import { PrismaService } from './prisma.service';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateProfileDto } from './update-profile.dto';
@@ -15,13 +16,17 @@ const SAFE_USER_SELECT = {
   isActive: true,
   mfaEnabled: true,
   baseBonus: true,
+  payrollEmployeeId: true,
   createdAt: true,
   additionalRoles: { select: { role: true } },
 } as const;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly payroll: PayrollService,
+  ) {}
 
   async create(dto: CreateUserDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -84,6 +89,16 @@ export class UsersService {
       role: dto.role,
       baseBonus: dto.baseBonus ?? undefined,
     };
+
+    // Linking to a payroll employee makes their daily rate the base bonus.
+    if (dto.payrollEmployeeId === null) {
+      data.payrollEmployeeId = null;
+    } else if (dto.payrollEmployeeId !== undefined) {
+      const employee = await this.payroll.getEmployee(dto.payrollEmployeeId);
+      if (!employee) throw new BadRequestException(`Payroll employee ${dto.payrollEmployeeId} was not found.`);
+      data.payrollEmployeeId = employee.id;
+      if (employee.dailyRate > 0) data.baseBonus = employee.dailyRate;
+    }
 
     // If primary role changed, ensure it's removed from additionalRoles
     if (dto.role && dto.role !== user.role) {

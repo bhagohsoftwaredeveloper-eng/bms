@@ -13,8 +13,18 @@ export interface TeamMember extends AuthenticatedUser {
   isActive: boolean;
   mfaEnabled: boolean;
   baseBonus: string;
+  payrollEmployeeId: number | null;
   createdAt: string;
   additionalRoles: { role: UserRole }[];
+}
+
+export interface PayrollEmployee {
+  id: number;
+  name: string;
+  employeeNumber: string | null;
+  department: string | null;
+  dailyRate: number;
+  isActive: boolean;
 }
 
 export interface LoginResponse {
@@ -135,9 +145,20 @@ export interface Earning {
   amount: string;
   type: EarningType;
   status: EarningStatus;
+  note?: string | null;
   createdAt: string;
   user?: Pick<AuthenticatedUser, 'fullName' | 'role'>;
   job?: Job;
+}
+
+export interface InstallationRate {
+  baseAmount: number;
+  extraAmount: number;
+}
+
+export interface InstallationRates {
+  INSIDE_TAGUM: InstallationRate;
+  OUTSIDE_TAGUM: InstallationRate;
 }
 
 export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'RELEASED';
@@ -328,6 +349,7 @@ export interface TeamMemberKpi extends KpiDashboard {
   userId: string;
   fullName: string;
   role: UserRole;
+  availableBalance: number;
 }
 
 export type IncentiveStatus = 'PENDING' | 'APPROVED' | 'PAID';

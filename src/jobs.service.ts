@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { JobStatus, LicenseStatus, Prisma } from '@prisma/client';
+import { EarningsService } from './earnings.service';
 import { PrismaService } from './prisma.service';
 import { NotificationsService } from './notifications.service';
 import { AssignInstallerDto } from './assign-installer.dto';
@@ -15,9 +17,12 @@ import { UpdateJobDto } from './update-job.dto';
 
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly earnings: EarningsService,
   ) {}
 
   async create(dto: CreateJobDto) {
@@ -159,11 +164,20 @@ export class JobsService {
       },
     });
 
-    return this.prisma.job.update({
+    const updated = await this.prisma.job.update({
       where: { id: job.id },
       data: { jobStatus: JobStatus.WAITING_ACTIVATION },
       include: { proof: true },
     });
+
+    // A pricing problem must never block the installer's proof submission.
+    try {
+      await this.earnings.ensureInstallationEarning(job.id);
+    } catch (err) {
+      this.logger.error(`Could not create installation earning for job ${job.id}`, err instanceof Error ? err.stack : String(err));
+    }
+
+    return updated;
   }
 
   findByMonth(month: number, year: number) {

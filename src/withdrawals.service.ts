@@ -40,25 +40,30 @@ export class WithdrawalsService {
    * through these states, so this single formula stays accurate at every stage.
    */
   async computeAvailableBalance(userId: string): Promise<number> {
-    const [earnedTotal, deductedWithdrawals] = await Promise.all([
-      this.prisma.earning.aggregate({
-        where: { userId, status: { in: [EarningStatus.APPROVED, EarningStatus.PAID] } },
+    return (await this.computeAvailableBalances([userId])).get(userId) ?? 0;
+  }
+
+  /** Same formula as computeAvailableBalance, for many users in two queries. */
+  async computeAvailableBalances(userIds: string[]): Promise<Map<string, number>> {
+    const [earned, deducted] = await Promise.all([
+      this.prisma.earning.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, status: { in: [EarningStatus.APPROVED, EarningStatus.PAID] } },
         _sum: { amount: true },
       }),
-      this.prisma.withdrawal.aggregate({
+      this.prisma.withdrawal.groupBy({
+        by: ['userId'],
         where: {
-          userId,
-          status: {
-            in: [WithdrawalStatus.PENDING, WithdrawalStatus.APPROVED, WithdrawalStatus.RELEASED],
-          },
+          userId: { in: userIds },
+          status: { in: [WithdrawalStatus.PENDING, WithdrawalStatus.APPROVED, WithdrawalStatus.RELEASED] },
         },
         _sum: { amount: true },
       }),
     ]);
 
-    const earned = Number(earnedTotal._sum.amount ?? 0);
-    const deducted = Number(deductedWithdrawals._sum.amount ?? 0);
-    return Math.max(0, earned - deducted);
+    const earnedBy = new Map(earned.map((e) => [e.userId, Number(e._sum.amount ?? 0)]));
+    const deductedBy = new Map(deducted.map((w) => [w.userId, Number(w._sum.amount ?? 0)]));
+    return new Map(userIds.map((id) => [id, Math.max(0, (earnedBy.get(id) ?? 0) - (deductedBy.get(id) ?? 0))]));
   }
 
   async create(userId: string, dto: CreateWithdrawalDto) {
