@@ -5,6 +5,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { SearchableClientSelect } from '../components/SearchableClientSelect';
 import { Pagination, usePagination } from '../components/Pagination';
+import { RowActionsMenu } from '../components/RowActionsMenu';
 import { useAuthStore } from '../lib/auth-store';
 import type { AuthenticatedUser, Client, License, NenposClient, SoftwareProduct } from '../lib/types';
 
@@ -1455,45 +1456,40 @@ export function LicensesPage() {
                               <td><StatusBadge status={license.status} /></td>
                               <LicenseDateCells license={license} />
                               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                                  {!isDeveloper && !license.voidedAt && (
-                                    <button type="button" className="btn btn-secondary"
-                                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                                      onClick={() => {
-                                        setTransferSuccess(null);
-                                        setTransferForm(EMPTY_SECURE_FORM);
-                                        setTransferError('');
-                                        setTransferringLicense(license);
-                                      }}>
-                                      Transfer
-                                    </button>
-                                  )}
+                                <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
                                   {!license.voidedAt && isDeveloper && license.status === 'PENDING' && (
                                     <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
                                       onClick={() => setActivatingId(license.id)}>
                                       Activate
                                     </button>
                                   )}
-                                  {!isDeveloper && !license.voidedAt && license.status === 'ACTIVATED' && (
-                                    <button type="button" className="btn btn-secondary"
-                                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                                      disabled={suspendLicense.isPending}
-                                      onClick={() => suspendLicense.mutate(license.id)}>
-                                      Suspend
-                                    </button>
-                                  )}
-                                  {!isDeveloper && !license.voidedAt && (
-                                    <button type="button" className="btn btn-secondary"
-                                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                                      onClick={() => openEdit(license)}>
-                                      Edit
-                                    </button>
-                                  )}
-                                  <button type="button" className="btn btn-secondary"
-                                    style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                                    onClick={() => setViewLicense(license)}>
-                                    View
-                                  </button>
+                                  <RowActionsMenu
+                                    actions={[
+                                      ...(!isDeveloper && !license.voidedAt
+                                        ? [{
+                                            label: 'Transfer',
+                                            onClick: () => {
+                                              setTransferSuccess(null);
+                                              setTransferForm(EMPTY_SECURE_FORM);
+                                              setTransferError('');
+                                              setTransferringLicense(license);
+                                            },
+                                          }]
+                                        : []),
+                                      ...(!isDeveloper && !license.voidedAt
+                                        ? [{ label: 'Edit', onClick: () => openEdit(license) }]
+                                        : []),
+                                      { label: 'View', onClick: () => setViewLicense(license) },
+                                      ...(!isDeveloper && !license.voidedAt && license.status === 'ACTIVATED'
+                                        ? [{
+                                            label: 'Suspend',
+                                            danger: true,
+                                            disabled: suspendLicense.isPending,
+                                            onClick: () => suspendLicense.mutate(license.id),
+                                          }]
+                                        : []),
+                                    ]}
+                                  />
                                 </div>
                               </td>
                             </tr>
