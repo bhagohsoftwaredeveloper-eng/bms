@@ -1,6 +1,6 @@
 import { JobsService } from './jobs.service';
 
-function makePrisma(overrides: { job?: unknown } = {}) {
+function makePrisma(overrides: { job?: unknown; validInstallerCount?: number } = {}) {
   const job = 'job' in overrides
     ? overrides.job
     : { id: 'job-1', clientId: 'client-1', installerId: 'old-installer', client: { businessName: 'Acme' } };
@@ -21,6 +21,12 @@ function makePrisma(overrides: { job?: unknown } = {}) {
       update: jest.fn().mockResolvedValue(assigned),
       findUnique: jest.fn().mockResolvedValue(job),
       findMany: jest.fn().mockResolvedValue([]),
+    },
+    // Role validation: by default every id passed is a real INSTALLER.
+    user: {
+      count: jest.fn(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(overrides.validInstallerCount ?? where.id.in.length),
+      ),
     },
     tx: { jobUpdate: txJobUpdate, jobCreate: txJobCreate, deleteMany: txDeleteMany, createMany: txCreateMany },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) =>
@@ -63,6 +69,32 @@ describe('JobsService.assignInstaller', () => {
     expect(deps.notifications.notify).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'installer-2' }),
     );
+  });
+
+  it('checks that every id belongs to a user with the INSTALLER role', async () => {
+    const prisma = makePrisma();
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await service.assignInstaller('job-1', { installerIds: ['installer-1', 'installer-2'] });
+
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: { id: { in: ['installer-1', 'installer-2'] }, role: 'INSTALLER' },
+    });
+  });
+
+  it('rejects an id that does not belong to an installer, before writing anything', async () => {
+    // Only 1 of the 2 ids resolves to a user with the INSTALLER role.
+    const prisma = makePrisma({ validInstallerCount: 1 });
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await expect(
+      service.assignInstaller('job-1', { installerIds: ['installer-1', 'not-an-installer'] }),
+    ).rejects.toThrow('One or more selected installers are invalid.');
+    expect(prisma.tx.jobUpdate).not.toHaveBeenCalled();
+    expect(prisma.tx.createMany).not.toHaveBeenCalled();
+    expect(deps.notifications.notify).not.toHaveBeenCalled();
   });
 });
 
@@ -127,6 +159,8 @@ describe('JobsService.update', () => {
     });
     expect(prisma.tx.deleteMany).toHaveBeenCalledWith({ where: { jobId: 'job-1' } });
     expect(prisma.tx.createMany).not.toHaveBeenCalled();
+    // Nothing to validate, so no role lookup is issued for an empty list.
+    expect(prisma.user.count).not.toHaveBeenCalled();
   });
 });
 

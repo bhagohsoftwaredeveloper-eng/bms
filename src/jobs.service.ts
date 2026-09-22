@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { JobStatus, LicenseStatus, Prisma } from '@prisma/client';
+import { JobStatus, LicenseStatus, Prisma, UserRole } from '@prisma/client';
 import { EarningsService } from './earnings.service';
 import { PrismaService } from './prisma.service';
 import { NotificationsService } from './notifications.service';
@@ -28,6 +28,8 @@ export class JobsService {
   async create(dto: CreateJobDto) {
     const installerIds = dto.installerIds ?? [];
     const primaryInstallerId = installerIds[0];
+    await this.assertAllAreInstallers(installerIds);
+
     // The job row and its roster must land together: a job row without its
     // JobInstaller rows is a half-assigned job.
     const job = await this.prisma.$transaction(async (tx) => {
@@ -55,6 +57,19 @@ export class JobsService {
       await this.notifyAssignment(job.id, installerIds, job.client.businessName);
     }
     return job;
+  }
+
+  /** Guards against a direct API call assigning an incentive share to a user
+   *  who is not an installer (the admin UI only ever offers installers). */
+  private async assertAllAreInstallers(installerIds: string[]) {
+    if (installerIds.length === 0) return;
+    const ids = [...new Set(installerIds)];
+    const validCount = await this.prisma.user.count({
+      where: { id: { in: ids }, role: UserRole.INSTALLER },
+    });
+    if (validCount !== ids.length) {
+      throw new BadRequestException('One or more selected installers are invalid.');
+    }
   }
 
   findAll(userId?: string, role?: string) {
@@ -108,6 +123,7 @@ export class JobsService {
    *  the explicit "Assign" action should flip the job to ASSIGNED — a plain
    *  edit (e.g. changing remarks) must never move a COMPLETED job backwards. */
   private async setInstallers(jobId: string, installerIds: string[], options: { setAssignedStatus?: boolean } = {}) {
+    await this.assertAllAreInstallers(installerIds);
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.job.update({
         where: { id: jobId },
