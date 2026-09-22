@@ -575,24 +575,12 @@ function NenposClientsTab() {
                             {row.address ?? '—'}
                           </td>
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}
-                                onClick={() => openEdit(row)}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}
-                                onClick={() => setViewRecord(row)}
-                              >
-                                View
-                              </button>
-                            </div>
+                            <RowActionsMenu
+                              actions={[
+                                { label: 'Edit', onClick: () => openEdit(row) },
+                                { label: 'View', onClick: () => setViewRecord(row) },
+                              ]}
+                            />
                           </td>
                         </tr>
                         )) : []),
