@@ -410,7 +410,8 @@ input[type="text"] {
 /* Standalone form controls (used outside a .field wrapper via class="input") —
    same look as .field inputs. Width comes from the surrounding layout. */
 input.input,
-select.input {
+select.input,
+textarea.input {
   border: 1.5px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.9rem;
@@ -422,13 +423,19 @@ select.input {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+textarea.input {
+  resize: vertical;
+}
+
 input.input:hover,
-select.input:hover {
+select.input:hover,
+textarea.input:hover {
   border-color: var(--accent);
 }
 
 input.input:focus,
-select.input:focus {
+select.input:focus,
+textarea.input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-light);
