@@ -1,6 +1,8 @@
-import { IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsString } from 'class-validator';
 
 export class AssignInstallerDto {
-  @IsString()
-  installerId!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installerIds!: string[];
 }

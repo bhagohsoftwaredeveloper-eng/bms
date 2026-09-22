@@ -1,13 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsDate, IsOptional, IsString } from 'class-validator';
 
 export class CreateJobDto {
   @IsString()
   clientId!: string;
 
   @IsOptional()
-  @IsString()
-  installerId?: string;
+  @IsArray()
+  @IsString({ each: true })
+  installerIds?: string[];
 
   @IsOptional()
   @IsString()
