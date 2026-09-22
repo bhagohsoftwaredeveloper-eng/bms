@@ -31,7 +31,7 @@ function InstallerCheckboxList({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '0.5rem' }}>
       {installers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No installers found.</span>}
       {installers.map((installer) => (
-        <label key={installer.id} htmlFor={`${idPrefix}-${installer.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+        <label key={installer.id} htmlFor={`${idPrefix}-${installer.id}`} className="checklist-item">
           <input
             id={`${idPrefix}-${installer.id}`}
             type="checkbox"
