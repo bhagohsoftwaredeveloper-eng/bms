@@ -1,7 +1,8 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { KpiDefinitionRow, UserRole } from '../lib/types';
+import { useAuthStore } from '../lib/auth-store';
+import type { InstallationRates, KpiDefinitionRow, UserRole } from '../lib/types';
 
 const KPI_ROLES: UserRole[] = ['INSTALLER', 'DEVELOPER', 'DESIGNER', 'LIAISON', 'SALES_STAFF', 'ADMIN_STAFF'];
 
@@ -247,6 +248,151 @@ function DesignerPointsPanel() {
   );
 }
 
+type RateForm = Record<'INSIDE_TAGUM' | 'OUTSIDE_TAGUM', { baseAmount: string; extraAmount: string }>;
+
+const RATE_LOCATIONS: Array<{ key: keyof RateForm; label: string; hint: string }> = [
+  { key: 'INSIDE_TAGUM', label: 'Inside Tagum', hint: 'Address contains "Tagum" (or is blank)' },
+  { key: 'OUTSIDE_TAGUM', label: 'Outside Tagum', hint: 'Any other address' },
+];
+
+const EXAMPLE_COMPUTERS = [1, 2, 5];
+
+function previewAmount(rate: { baseAmount: string; extraAmount: string }, computers: number) {
+  return (Number(rate.baseAmount) || 0) + (computers - 1) * (Number(rate.extraAmount) || 0);
+}
+
+function RateInput({ id, value, onChange, disabled }: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <span style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600, pointerEvents: 'none' }}>₱</span>
+      <input
+        id={id}
+        type="number"
+        min={0}
+        step="0.01"
+        inputMode="decimal"
+        required
+        disabled={disabled}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ paddingLeft: '1.9rem', width: '100%', boxSizing: 'border-box' }}
+      />
+    </div>
+  );
+}
+
+function InstallationRatesPanel() {
+  const qc = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const canEdit = user?.role === 'SUPER_ADMIN';
+  const [form, setForm] = useState<RateForm | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const ratesQuery = useQuery({
+    queryKey: ['installation-rates'],
+    queryFn: async () => (await api.get<InstallationRates>('/earnings/installation-rates')).data,
+  });
+
+  useEffect(() => {
+    if (!ratesQuery.data) return;
+    const toForm = (r: InstallationRates['INSIDE_TAGUM']) => ({ baseAmount: String(r.baseAmount), extraAmount: String(r.extraAmount) });
+    setForm({ INSIDE_TAGUM: toForm(ratesQuery.data.INSIDE_TAGUM), OUTSIDE_TAGUM: toForm(ratesQuery.data.OUTSIDE_TAGUM) });
+  }, [ratesQuery.data]);
+
+  const save = useMutation({
+    mutationFn: () => {
+      const toRate = (r: RateForm['INSIDE_TAGUM']) => ({ baseAmount: Number(r.baseAmount) || 0, extraAmount: Number(r.extraAmount) || 0 });
+      return api.put('/earnings/installation-rates', {
+        INSIDE_TAGUM: toRate(form!.INSIDE_TAGUM),
+        OUTSIDE_TAGUM: toRate(form!.OUTSIDE_TAGUM),
+      });
+    },
+    onSuccess: () => {
+      setSaved(true);
+      qc.invalidateQueries({ queryKey: ['installation-rates'] });
+    },
+  });
+
+  const isConfigured = !!ratesQuery.data && RATE_LOCATIONS.some(({ key }) => {
+    const r = ratesQuery.data[key];
+    return r.baseAmount > 0 || r.extraAmount > 0;
+  });
+
+  const update = (key: keyof RateForm, field: 'baseAmount' | 'extraAmount', value: string) => {
+    setSaved(false);
+    setForm((prev) => (prev ? { ...prev, [key]: { ...prev[key], [field]: value } } : prev));
+  };
+
+  return (
+    <div className="card" style={{ marginTop: '1.5rem', maxWidth: 720 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Installation Rates</div>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 480 }}>
+            What an installer earns per installation, on top of KPI incentives. Added automatically as
+            <strong> Pending</strong> when they submit proof.
+          </p>
+        </div>
+        {isConfigured
+          ? <span className="badge badge-active">Auto-earnings on</span>
+          : <span className="badge badge-draft">Not set</span>}
+      </div>
+
+      {ratesQuery.isLoading && <p>Loading rates…</p>}
+      {ratesQuery.isError && <p className="error-text">Failed to load installation rates.</p>}
+      {form && (
+        <form onSubmit={(e: FormEvent) => { e.preventDefault(); save.mutate(); }} style={{ marginTop: '1.1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            {RATE_LOCATIONS.map(({ key, label, hint }) => (
+              <div key={key} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '1rem', background: 'var(--surface-secondary)' }}>
+                <div style={{ fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>{hint}</div>
+                <div className="field">
+                  <label htmlFor={`${key}-base`}>Base · 1st computer</label>
+                  <RateInput id={`${key}-base`} disabled={!canEdit} value={form[key].baseAmount} onChange={(v) => update(key, 'baseAmount', v)} />
+                </div>
+                <div className="field">
+                  <label htmlFor={`${key}-extra`}>Extra · each additional computer</label>
+                  <RateInput id={`${key}-extra`} disabled={!canEdit} value={form[key].extraAmount} onChange={(v) => update(key, 'extraAmount', v)} />
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', borderTop: '1px dashed var(--border)', paddingTop: '0.7rem' }}>
+                  {EXAMPLE_COMPUTERS.map((n) => (
+                    <span key={n} style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem', borderRadius: 999, background: 'var(--accent-light)', color: 'var(--accent)', fontWeight: 600 }}>
+                      {n} PC{n !== 1 ? 's' : ''} · ₱{previewAmount(form[key], n).toLocaleString()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p style={{ margin: '0.9rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            Location is read from the client&apos;s address (contains &quot;Tagum&quot; = inside). Computers = the client&apos;s
+            active licenses. Leave both rates at 0 to turn auto-earnings off.
+          </p>
+
+          {canEdit ? (
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap' }}>
+              <button type="submit" className="btn btn-primary" disabled={save.isPending}>
+                {save.isPending ? 'Saving…' : 'Save rates'}
+              </button>
+              {saved && <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>✓ Saved. Applies to future installations only.</span>}
+              {save.isError && <span className="error-text">Could not save the rates.</span>}
+            </div>
+          ) : (
+            <p style={{ margin: '0.75rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Only a Super Admin can change these rates.</p>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
+
 export function KpiSettingsPage() {
   const qc = useQueryClient();
   const [role, setRole] = useState<UserRole>('INSTALLER');
@@ -347,6 +493,8 @@ export function KpiSettingsPage() {
         </form>
         {create.isError && <p className="error-text" style={{ marginTop: '0.5rem' }}>Failed to add KPI — a KPI with that name may already exist for this role.</p>}
       </div>
+
+      <InstallationRatesPanel />
 
       <DesignerPointsPanel />
     </div>

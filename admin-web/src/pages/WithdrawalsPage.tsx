@@ -84,6 +84,12 @@ export function WithdrawalsPage() {
     },
   });
 
+  // Suggest withdrawing the whole available balance; the user can edit it.
+  function openRequestDialog() {
+    setForm((prev) => ({ ...prev, amount: availableBalance > 0 ? String(availableBalance) : '' }));
+    setShowForm(true);
+  }
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     requestWithdrawal.mutate();
@@ -152,7 +158,7 @@ export function WithdrawalsPage() {
           </p>
         </div>
         {canRequest && (
-          <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
+          <button type="button" className="btn btn-primary" onClick={openRequestDialog}>
             Request withdrawal
           </button>
         )}
@@ -198,6 +204,20 @@ export function WithdrawalsPage() {
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
             />
+            {availableBalance > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <span>Suggested: full balance of <strong style={{ color: 'var(--success)' }}>₱{availableBalance.toLocaleString()}</strong></span>
+                {Number(form.amount) !== availableBalance && (
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, amount: String(availableBalance) })}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', fontWeight: 600, color: 'var(--accent)' }}
+                  >
+                    Use full amount
+                  </button>
+                )}
+              </div>
+            )}
             {form.amount && exceedsBalance && (
               <p className="error-text" style={{ margin: '0.25rem 0 0' }}>
                 Amount exceeds your available balance of ₱{availableBalance.toLocaleString()}.

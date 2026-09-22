@@ -8,12 +8,16 @@ import { RolesGuard } from './roles.guard';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateProfileDto } from './update-profile.dto';
 import { UpdateUserDto } from './update-user.dto';
+import { PayrollService } from './payroll.service';
 import { UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly payroll: PayrollService,
+  ) {}
 
   // ── Self-service (must be before /:id routes to avoid route conflict) ───────
 
@@ -33,6 +37,20 @@ export class UsersController {
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Get('payroll-employees')
+  payrollEmployees() {
+    return this.payroll.listEmployees();
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Post('sync-payroll')
+  async syncPayroll() {
+    const { linked, unmatched } = await this.payroll.autoLinkUsers();
+    const { updated, skipped } = await this.payroll.syncLinkedBaseBonuses();
+    return { linked, updated, skipped, unmatched };
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)

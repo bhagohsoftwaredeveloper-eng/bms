@@ -204,7 +204,7 @@ export function AnalyticsPage() {
                 <th style={{ textAlign: 'left', padding: '0.5rem 0', fontWeight: 600 }}>Role</th>
                 <th style={{ textAlign: 'right', padding: '0.5rem 0', fontWeight: 600 }}>Score</th>
                 <th style={{ textAlign: 'right', padding: '0.5rem 0', fontWeight: 600 }}>Base Bonus</th>
-                <th style={{ textAlign: 'right', padding: '0.5rem 0', fontWeight: 600 }}>Incentive</th>
+                <th style={{ textAlign: 'right', padding: '0.5rem 0', fontWeight: 600 }} title="Available balance: approved earnings minus withdrawals">Incentive</th>
                 <th style={{ textAlign: 'right', padding: '0.5rem 0', fontWeight: 600 }}>Status</th>
                 <th style={{ width: 30 }}></th>
               </tr>
@@ -223,7 +223,7 @@ export function AnalyticsPage() {
                         {m.totalScore.toFixed(1)}
                       </td>
                       <td style={{ textAlign: 'right', padding: '0.6rem 0', color: 'var(--text-muted)' }}>₱{(m.baseBonus ?? 0).toLocaleString()}</td>
-                      <td style={{ textAlign: 'right', padding: '0.6rem 0' }}>₱{m.incentiveEstimate.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', padding: '0.6rem 0' }}>₱{m.availableBalance.toLocaleString()}</td>
                       <td style={{ textAlign: 'right', padding: '0.6rem 0' }}>
                         {m.incentiveStatus && (
                           <span style={{ color: STATUS_COLOR[m.incentiveStatus], fontSize: '0.8rem', fontWeight: 700 }}>

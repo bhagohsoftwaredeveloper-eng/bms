@@ -7,5 +7,6 @@ import { WithdrawalsService } from './withdrawals.service';
   imports: [NotificationsModule],
   controllers: [WithdrawalsController],
   providers: [WithdrawalsService],
+  exports: [WithdrawalsService],
 })
 export class WithdrawalsModule {}

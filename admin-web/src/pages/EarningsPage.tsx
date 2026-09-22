@@ -270,7 +270,12 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A</span>
                     )}
                   </td>
-                  <td>{earning.type}</td>
+                  <td>
+                    {earning.type}
+                    {earning.note && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{earning.note}</div>
+                    )}
+                  </td>
                   <td>₱{Number(earning.amount).toLocaleString()}</td>
                   <td style={{ fontWeight: 600, color: 'var(--success)' }}>
                     ₱{earning.runningBalance.toLocaleString()}

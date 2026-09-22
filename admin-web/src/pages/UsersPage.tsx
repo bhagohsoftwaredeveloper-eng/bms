@@ -5,7 +5,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
 import { TableToolbar, matchesSearch } from '../components/TableToolbar';
-import type { TeamMember, UserRole } from '../lib/types';
+import type { PayrollEmployee, TeamMember, UserRole } from '../lib/types';
 
 const ALL_ROLES: UserRole[] = [
   'SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF', 'INSTALLER', 'DEVELOPER',
@@ -84,6 +84,15 @@ function EditUserDialog({ user, onClose }: { user: TeamMember | null; onClose: (
   const [role, setRole] = useState<UserRole>('INSTALLER');
   const [additionalRoles, setAdditionalRoles] = useState<UserRole[]>([]);
   const [baseBonus, setBaseBonus] = useState('10000');
+  const [payrollEmployeeId, setPayrollEmployeeId] = useState('');
+
+  const employeesQuery = useQuery({
+    queryKey: ['payroll-employees'],
+    queryFn: async () => (await api.get<PayrollEmployee[]>('/users/payroll-employees')).data,
+    enabled: !!user,
+    retry: false,
+  });
+  const linkedEmployee = employeesQuery.data?.find((e) => String(e.id) === payrollEmployeeId);
 
   useEffect(() => {
     if (user) {
@@ -93,6 +102,7 @@ function EditUserDialog({ user, onClose }: { user: TeamMember | null; onClose: (
       setRole(user.role);
       setAdditionalRoles((user.additionalRoles ?? []).map(r => r.role));
       setBaseBonus(user.baseBonus != null ? String(Number(user.baseBonus)) : '10000');
+      setPayrollEmployeeId(user.payrollEmployeeId != null ? String(user.payrollEmployeeId) : '');
     }
   }, [user]);
 
@@ -104,6 +114,10 @@ function EditUserDialog({ user, onClose }: { user: TeamMember | null; onClose: (
       role,
       additionalRoles,
       baseBonus: baseBonus !== '' ? Number(baseBonus) : undefined,
+      // Only send the link when it changed, so saving never depends on the payroll API being up.
+      ...(payrollEmployeeId !== (user?.payrollEmployeeId != null ? String(user.payrollEmployeeId) : '')
+        ? { payrollEmployeeId: payrollEmployeeId ? Number(payrollEmployeeId) : null }
+        : {}),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users', 'team'] });
@@ -135,11 +149,40 @@ function EditUserDialog({ user, onClose }: { user: TeamMember | null; onClose: (
           <input id="edit-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="field">
+          <label htmlFor="edit-payroll">Payroll employee</label>
+          <select
+            id="edit-payroll"
+            value={payrollEmployeeId}
+            disabled={employeesQuery.isLoading || employeesQuery.isError}
+            onChange={(e) => {
+              setPayrollEmployeeId(e.target.value);
+              const picked = employeesQuery.data?.find((emp) => String(emp.id) === e.target.value);
+              if (picked && picked.dailyRate > 0) setBaseBonus(String(picked.dailyRate));
+            }}
+          >
+            <option value="">{employeesQuery.isLoading ? 'Loading payroll…' : '— Not linked —'}</option>
+            {(employeesQuery.data ?? []).map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.name}{emp.employeeNumber ? ` · ${emp.employeeNumber}` : ''} · ₱{emp.dailyRate.toLocaleString()}/day{emp.isActive ? '' : ' (inactive)'}
+              </option>
+            ))}
+          </select>
+          {employeesQuery.isError && (
+            <p className="error-text" style={{ margin: '0.35rem 0 0' }}>
+              {(employeesQuery.error as { response?: { data?: { message?: string } } })?.response?.data?.message
+                ?? 'Could not load payroll employees.'}
+            </p>
+          )}
+        </div>
+        <div className="field">
           <label htmlFor="edit-baseBonus">Salary grade — base bonus (₱)</label>
           <input id="edit-baseBonus" type="number" min={0} step="any" value={baseBonus}
+            disabled={!!linkedEmployee}
             onChange={(e) => setBaseBonus(e.target.value)} />
           <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            Basis for KPI incentive computation (incentive = base × score %).
+            {linkedEmployee
+              ? "Pulled from payroll: this employee's daily rate. Unlink to edit manually."
+              : 'Basis for KPI incentive computation (incentive = base × score %).'}
           </p>
         </div>
         <div className="field">
@@ -220,6 +263,12 @@ export function UsersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users', 'team'] }),
   });
 
+  const syncPayroll = useMutation({
+    mutationFn: async () =>
+      (await api.post<{ linked: number; updated: number; skipped: number; unmatched: string[] }>('/users/sync-payroll')).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+  });
+
   const toggleFormRole = (role: UserRole) => {
     setForm(prev => {
       if (prev.additionalRoles.includes(role)) {
@@ -239,10 +288,33 @@ export function UsersPage() {
             Manage team member accounts. Each member has one <strong>primary role</strong> (their dashboard &amp; portal) plus any <strong>extra access</strong> you grant. Set both from <strong>Edit</strong>.
           </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
-          Add member
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" disabled={syncPayroll.isPending} onClick={() => syncPayroll.mutate()}>
+            {syncPayroll.isPending ? 'Syncing…' : 'Sync base bonus from payroll'}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
+            Add member
+          </button>
+        </div>
       </div>
+
+      {syncPayroll.isSuccess && (
+        <p style={{ color: 'var(--success)', fontSize: '0.85rem', marginTop: 0 }}>
+          ✓ Base bonus updated for {syncPayroll.data.updated} member{syncPayroll.data.updated !== 1 ? 's' : ''}
+          {syncPayroll.data.linked > 0 ? ` (${syncPayroll.data.linked} newly linked by name)` : ''}.
+          {syncPayroll.data.unmatched.length > 0 && (
+            <span style={{ color: 'var(--text-muted)' }}>
+              {' '}Not in payroll (link manually via Edit if needed): {syncPayroll.data.unmatched.join(', ')}.
+            </span>
+          )}
+        </p>
+      )}
+      {syncPayroll.isError && (
+        <p className="error-text" style={{ marginTop: 0 }}>
+          {(syncPayroll.error as { response?: { data?: { message?: string } } })?.response?.data?.message
+            ?? 'Could not sync from payroll.'}
+        </p>
+      )}
 
       <Dialog
         isOpen={showForm}
