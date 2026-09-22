@@ -16,6 +16,7 @@ function makePrisma(overrides: {
       findFirst: jest.fn().mockResolvedValue(overrides.existingEarning ?? null),
       create: jest.fn().mockResolvedValue({}),
     },
+    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     jobInstaller: { findMany: jest.fn().mockResolvedValue(overrides.installers ?? []) },
     license: { count: jest.fn().mockResolvedValue(overrides.licenseCount ?? 1) },
     installationRate: {

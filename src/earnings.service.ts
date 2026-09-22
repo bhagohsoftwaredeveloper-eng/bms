@@ -108,7 +108,7 @@ export class EarningsService {
     const noteFor = (share: number) =>
       installerIds.length > 1 ? `${note} · Split ${installerIds.length} ways: ₱${share.toFixed(2)} each` : note;
 
-    const created = await Promise.all(
+    const created = await this.prisma.$transaction(
       installerIds.map((userId, index) =>
         this.prisma.earning.create({
           data: { userId, jobId, amount: shares[index], type: 'INSTALLATION', note: noteFor(shares[index]) },
