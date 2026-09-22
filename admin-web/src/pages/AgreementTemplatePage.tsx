@@ -191,6 +191,7 @@ export function AgreementTemplatePage() {
         <div className="card" key={i} style={{ marginBottom: '0.75rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
             <input
+              className="input"
               value={section.heading}
               placeholder="Heading — leave empty for the preamble or signature block"
               style={{ flex: 1, fontWeight: 600 }}
@@ -212,6 +213,7 @@ export function AgreementTemplatePage() {
             )}
           </div>
           <textarea
+            className="input"
             value={section.body}
             rows={Math.min(20, Math.max(4, section.body.split('\n').length + 1))}
             style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.85rem', lineHeight: 1.5 }}
@@ -244,6 +246,7 @@ export function AgreementTemplatePage() {
       {!readOnly && (
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1.25rem', flexWrap: 'wrap' }}>
           <input
+            className="input"
             value={note}
             placeholder="What changed? (optional)"
             style={{ flex: 1, minWidth: 220 }}

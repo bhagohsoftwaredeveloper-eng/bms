@@ -73,7 +73,8 @@ export function ClientsPage() {
   });
 
   const createClient = useMutation({
-    mutationFn: async () => (await api.post<Client>('/clients', form)).data,
+    mutationFn: async () =>
+      (await api.post<Client>('/clients', { ...form, email: form.email.trim() || undefined })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setForm(EMPTY_FORM);
@@ -83,7 +84,7 @@ export function ClientsPage() {
 
   const updateClient = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof editForm }) =>
-      (await api.patch<Client>(`/clients/${id}`, data)).data,
+      (await api.patch<Client>(`/clients/${id}`, { ...data, email: data?.email.trim() || undefined })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setEditingClient(null);
@@ -198,7 +199,7 @@ export function ClientsPage() {
               />
             </div>
             <div className="field">
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">Email (optional)</label>
               <input
                 id="email"
                 type="email"
@@ -277,7 +278,7 @@ export function ClientsPage() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="edit-email">Email</label>
+                <label htmlFor="edit-email">Email (optional)</label>
                 <input
                   id="edit-email"
                   type="email"

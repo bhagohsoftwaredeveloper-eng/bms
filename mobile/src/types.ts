@@ -42,6 +42,7 @@ export interface Job {
   scheduleDate: string;
   jobStatus: JobStatus;
   remarks: string | null;
+  installers?: { user: { id: string; fullName: string } }[];
   client?: { businessName: string; ownerName: string; contactNo: string; address: string | null };
   license?: { status: string } | null;
   proof?: InstallationProof | null;

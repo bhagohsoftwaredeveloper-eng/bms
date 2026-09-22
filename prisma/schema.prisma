@@ -179,6 +179,7 @@ model User {
 
   // Relations
   installerJobs     Job[]                @relation("InstallerJobs")
+  jobAssignments    JobInstaller[]
   developerLicenses License[]            @relation("DeveloperActivations")
   licensesVoided    License[]            @relation("LicenseVoidedBy")
   nenposVoided      NenposClient[]       @relation("NenposClientVoidedBy")
@@ -321,8 +322,25 @@ model Job {
   proof     InstallationProof?
   earnings  Earning[]
   jobOrder  JobOrder?
+  installers JobInstaller[]
 
   @@map("jobs")
+}
+
+// Every installer assigned to a job (includes the primary Job.installerId).
+// Used to split the installation incentive equally when more than one
+// installer worked the job.
+model JobInstaller {
+  id        String   @id @default(uuid())
+  jobId     String   @map("job_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, userId])
+  @@map("job_installers")
 }
 
 // Proof of installation required before activation can be requested.

@@ -5,6 +5,7 @@ function makePrisma(overrides: {
   existingEarning?: unknown;
   licenseCount?: number;
   rates?: Array<{ location: string; baseAmount: number; extraAmount: number }>;
+  installers?: Array<{ userId: string }>;
 } = {}) {
   const job = 'job' in overrides
     ? overrides.job
@@ -15,6 +16,8 @@ function makePrisma(overrides: {
       findFirst: jest.fn().mockResolvedValue(overrides.existingEarning ?? null),
       create: jest.fn().mockResolvedValue({}),
     },
+    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    jobInstaller: { findMany: jest.fn().mockResolvedValue(overrides.installers ?? []) },
     license: { count: jest.fn().mockResolvedValue(overrides.licenseCount ?? 1) },
     installationRate: {
       findMany: jest.fn().mockResolvedValue(
@@ -87,5 +90,52 @@ describe('EarningsService.ensureInstallationEarning', () => {
     });
     await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
     expect(prisma.earning.create).not.toHaveBeenCalled();
+  });
+
+  it('splits the earning equally when two installers are assigned', async () => {
+    const prisma = makePrisma({
+      licenseCount: 1,
+      installers: [{ userId: 'installer-1' }, { userId: 'installer-2' }],
+    });
+    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+
+    // Both shares must be written atomically — a partial split would pay one
+    // installer and silently drop the other.
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(prisma.earning.create).toHaveBeenCalledTimes(2);
+    expect(prisma.earning.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        userId: 'installer-1',
+        jobId: 'job-1',
+        amount: 250,
+        type: 'INSTALLATION',
+        note: 'Inside Tagum · 1 computer · 500 · Split 2 ways: ₱250.00 each',
+      },
+    });
+    expect(prisma.earning.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        userId: 'installer-2',
+        jobId: 'job-1',
+        amount: 250,
+        type: 'INSTALLATION',
+        note: 'Inside Tagum · 1 computer · 500 · Split 2 ways: ₱250.00 each',
+      },
+    });
+  });
+
+  it('falls back to the legacy single-earner behavior when there are no JobInstaller rows', async () => {
+    const prisma = makePrisma({ licenseCount: 1, installers: [] });
+    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+
+    expect(prisma.earning.create).toHaveBeenCalledTimes(1);
+    expect(prisma.earning.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'installer-1',
+        jobId: 'job-1',
+        amount: 500,
+        type: 'INSTALLATION',
+        note: 'Inside Tagum · 1 computer · 500',
+      },
+    });
   });
 });

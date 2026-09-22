@@ -7,7 +7,7 @@ import {
 import { EarningStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { CreateEarningDto } from './create-earning.dto';
-import { computeInstallationEarning, type InstallationRates, type TagumLocation } from './installation-earning.util';
+import { computeInstallationEarning, splitInstallationEarning, type InstallationRates, type TagumLocation } from './installation-earning.util';
 import type { UpdateInstallationRatesDto } from './update-installation-rates.dto';
 
 const LOCATIONS: TagumLocation[] = ['INSIDE_TAGUM', 'OUTSIDE_TAGUM'];
@@ -77,8 +77,11 @@ export class EarningsService {
   }
 
   /**
-   * Creates the installer's PENDING INSTALLATION earning for a job once, priced from the
-   * client's address (inside/outside Tagum) and number of licensed computers. CCTV/signage
+   * Creates the PENDING INSTALLATION earning(s) for a job once, priced from the
+   * client's address (inside/outside Tagum) and number of licensed computers.
+   * When 2+ installers are assigned (via JobInstaller), the total is split
+   * equally between them; with none assigned to the join table yet, it falls
+   * back to the single `installerId` earner (legacy behavior). CCTV/signage
    * jobs are skipped: their labor earning comes from the job order.
    */
   async ensureInstallationEarning(jobId: string) {
@@ -92,16 +95,27 @@ export class EarningsService {
     const existing = await this.prisma.earning.findFirst({ where: { jobId, type: 'INSTALLATION' } });
     if (existing) return null;
 
-    const [rates, licenseCount] = await Promise.all([
+    const [rates, licenseCount, jobInstallers] = await Promise.all([
       this.getInstallationRates(),
       this.prisma.license.count({ where: { clientId: job.clientId, voidedAt: null } }),
+      this.prisma.jobInstaller.findMany({ where: { jobId }, select: { userId: true } }),
     ]);
     const { amount, note } = computeInstallationEarning({ address: job.client.address, licenseCount, rates });
     if (amount <= 0) return null;
 
-    return this.prisma.earning.create({
-      data: { userId: job.installerId, jobId, amount, type: 'INSTALLATION', note },
-    });
+    const installerIds = jobInstallers.length > 0 ? jobInstallers.map((row) => row.userId) : [job.installerId];
+    const shares = splitInstallationEarning(amount, installerIds.length);
+    const noteFor = (share: number) =>
+      installerIds.length > 1 ? `${note} · Split ${installerIds.length} ways: ₱${share.toFixed(2)} each` : note;
+
+    const created = await this.prisma.$transaction(
+      installerIds.map((userId, index) =>
+        this.prisma.earning.create({
+          data: { userId, jobId, amount: shares[index], type: 'INSTALLATION', note: noteFor(shares[index]) },
+        }),
+      ),
+    );
+    return created;
   }
 
   async setStatus(id: string, status: EarningStatus, actorId: string) {

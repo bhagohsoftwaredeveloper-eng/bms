@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { JobStatus, LicenseStatus, Prisma } from '@prisma/client';
+import { JobStatus, LicenseStatus, Prisma, UserRole } from '@prisma/client';
 import { EarningsService } from './earnings.service';
 import { PrismaService } from './prisma.service';
 import { NotificationsService } from './notifications.service';
@@ -26,38 +26,92 @@ export class JobsService {
   ) {}
 
   async create(dto: CreateJobDto) {
-    const job = await this.prisma.job.create({
-      data: {
-        ...dto,
-        jobStatus: dto.installerId ? JobStatus.ASSIGNED : undefined,
-      },
-      include: { client: true },
+    const installerIds = dto.installerIds ?? [];
+    const primaryInstallerId = installerIds[0];
+    await this.assertAllAreInstallers(installerIds);
+
+    // The job row and its roster must land together: a job row without its
+    // JobInstaller rows is a half-assigned job.
+    const job = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.job.create({
+        data: {
+          clientId: dto.clientId,
+          installerId: primaryInstallerId,
+          licenseId: dto.licenseId,
+          scheduleDate: dto.scheduleDate,
+          remarks: dto.remarks,
+          jobStatus: primaryInstallerId ? JobStatus.ASSIGNED : undefined,
+        },
+        include: { client: true },
+      });
+      if (installerIds.length > 0) {
+        await tx.jobInstaller.createMany({
+          data: installerIds.map((userId) => ({ jobId: created.id, userId })),
+          skipDuplicates: true,
+        });
+      }
+      return created;
     });
-    if (job.installerId) {
-      await this.notifyAssignment(job.id, job.installerId, job.client.businessName);
+
+    if (installerIds.length > 0) {
+      await this.notifyAssignment(job.id, installerIds, job.client.businessName);
     }
     return job;
+  }
+
+  /** Guards against a direct API call assigning an incentive share to a user
+   *  who is not an installer (the admin UI only ever offers installers). */
+  private async assertAllAreInstallers(installerIds: string[]) {
+    if (installerIds.length === 0) return;
+    const ids = [...new Set(installerIds)];
+    const validCount = await this.prisma.user.count({
+      where: {
+        id: { in: ids },
+        OR: [{ role: UserRole.INSTALLER }, { additionalRoles: { some: { role: UserRole.INSTALLER } } }],
+      },
+    });
+    if (validCount !== ids.length) {
+      throw new BadRequestException('One or more selected installers are invalid.');
+    }
   }
 
   findAll(userId?: string, role?: string) {
     const where: Prisma.JobWhereInput = {};
     if (userId) {
       if (role === 'INSTALLER') {
-        where.installerId = userId;
+        // Also match legacy/gap jobs that have a primary installerId but no
+        // roster rows yet, so they stay visible to their installer.
+        where.OR = [
+          { installers: { some: { userId } } },
+          { installerId: userId, installers: { none: {} } },
+        ];
       }
     }
 
     return this.prisma.job.findMany({
       where,
       orderBy: { scheduleDate: 'desc' },
-      include: { client: true, installer: true, license: true, proof: true },
+      include: {
+        client: true,
+        installer: true,
+        license: true,
+        proof: true,
+        installers: { include: { user: { select: { id: true, fullName: true } } } },
+      },
     });
   }
 
   async findOne(id: string) {
     const job = await this.prisma.job.findUnique({
       where: { id },
-      include: { client: true, installer: true, license: true, proof: true, jobOrder: true },
+      include: {
+        client: true,
+        installer: true,
+        license: true,
+        proof: true,
+        jobOrder: true,
+        installers: { include: { user: { select: { id: true, fullName: true } } } },
+      },
     });
 
     if (!job) {
@@ -67,45 +121,74 @@ export class JobsService {
     return job;
   }
 
+  /** Replaces a job's assigned installers: sets the primary installerId to the
+   *  first id and rewrites its JobInstaller rows to exactly this list. Only
+   *  the explicit "Assign" action should flip the job to ASSIGNED — a plain
+   *  edit (e.g. changing remarks) must never move a COMPLETED job backwards. */
+  private async setInstallers(jobId: string, installerIds: string[], options: { setAssignedStatus?: boolean } = {}) {
+    await this.assertAllAreInstallers(installerIds);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.job.update({
+        where: { id: jobId },
+        data: {
+          installerId: installerIds[0] ?? null,
+          ...(options.setAssignedStatus && installerIds[0] ? { jobStatus: JobStatus.ASSIGNED } : {}),
+        },
+      });
+      await tx.jobInstaller.deleteMany({ where: { jobId } });
+      if (installerIds.length > 0) {
+        await tx.jobInstaller.createMany({
+          data: installerIds.map((userId) => ({ jobId, userId })),
+          skipDuplicates: true,
+        });
+      }
+      return updated;
+    });
+  }
+
   async assignInstaller(id: string, dto: AssignInstallerDto) {
     const job = await this.findOne(id);
-    const updated = await this.prisma.job.update({
-      where: { id },
-      data: { installerId: dto.installerId, jobStatus: JobStatus.ASSIGNED },
-    });
-    await this.notifyAssignment(id, dto.installerId, job.client.businessName);
+    const updated = await this.setInstallers(id, dto.installerIds, { setAssignedStatus: true });
+    await this.notifyAssignment(id, dto.installerIds, job.client.businessName);
     return updated;
   }
 
   async update(id: string, dto: UpdateJobDto) {
     await this.findOne(id);
-    return this.prisma.job.update({
+    await this.prisma.job.update({
       where: { id },
       data: {
         clientId: dto.clientId,
-        installerId: dto.installerId ?? null,
         scheduleDate: dto.scheduleDate,
         remarks: dto.remarks ?? null,
       },
-      include: { client: true, installer: true, license: true, proof: true },
     });
+    if (dto.installerIds !== undefined) {
+      // Plain edit: sync the installer list only, never touch jobStatus.
+      await this.setInstallers(id, dto.installerIds ?? []);
+    }
+    return this.findOne(id);
   }
 
-  private notifyAssignment(jobId: string, installerId: string, clientName: string) {
-    return this.notifications.notify({
-      userId: installerId,
-      title: 'New installation job assigned',
-      body: `You've been assigned an installation job for ${clientName}.`,
-      eventType: 'job_assigned',
-      data: { jobId, route: '/jobs' },
-    });
+  private notifyAssignment(jobId: string, installerIds: string[], clientName: string) {
+    return Promise.all(
+      installerIds.map((userId) =>
+        this.notifications.notify({
+          userId,
+          title: 'New installation job assigned',
+          body: `You've been assigned an installation job for ${clientName}.`,
+          eventType: 'job_assigned',
+          data: { jobId, route: '/jobs' },
+        }),
+      ),
+    );
   }
 
   async updateStatus(id: string, userId: string, role: string, dto: UpdateJobStatusDto) {
     const job = await this.findOne(id);
     
     // Authorization check
-    if (role === 'INSTALLER' && job.installerId !== userId) {
+    if (role === 'INSTALLER' && !this.isAssignedInstaller(job, userId)) {
       throw new ForbiddenException('You are not assigned to this job');
     }
     // Operators can update any job status for now (usually those they are working on)
@@ -213,9 +296,23 @@ export class JobsService {
 
   private async assertOwnedByInstaller(id: string, installerId: string) {
     const job = await this.findOne(id);
-    if (job.installerId !== installerId) {
+    if (!this.isAssignedInstaller(job, installerId)) {
       throw new ForbiddenException('You are not assigned to this job');
     }
     return job;
+  }
+
+  /** Single source of truth for "is this user assigned to this job".
+   *  Falls back to installerId equality when the roster is empty (legacy jobs
+   *  with no JobInstaller rows yet) — note `job.installers` is always an array
+   *  (never undefined) from findOne()'s include, so a plain `??` on `.some()`'s
+   *  boolean result would never trigger for [] and must be avoided here. */
+  private isAssignedInstaller(
+    job: { installerId: string | null; installers?: { userId: string }[] },
+    userId: string,
+  ): boolean {
+    return job.installers && job.installers.length > 0
+      ? job.installers.some((row) => row.userId === userId)
+      : job.installerId === userId;
   }
 }

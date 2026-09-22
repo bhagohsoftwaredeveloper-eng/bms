@@ -10,8 +10,40 @@ import { SearchableClientSelect } from '../components/SearchableClientSelect';
 import { useAuthStore } from '../lib/auth-store';
 import type { AuthenticatedUser, Client, Job, JobStatus } from '../lib/types';
 
-const EMPTY_FORM = { clientId: '', installerId: '', scheduleDate: '', remarks: '' };
+const EMPTY_FORM = { clientId: '', installerIds: [] as string[], scheduleDate: '', remarks: '' };
 const JOB_STATUSES: JobStatus[] = ['ASSIGNED', 'ON_GOING', 'WAITING_ACTIVATION', 'COMPLETED', 'CANCELLED'];
+
+function InstallerCheckboxList({
+  installers,
+  selectedIds,
+  onChange,
+  idPrefix,
+}: {
+  installers: AuthenticatedUser[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  idPrefix: string;
+}) {
+  const toggle = (id: string) => {
+    onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '0.5rem' }}>
+      {installers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No installers found.</span>}
+      {installers.map((installer) => (
+        <label key={installer.id} htmlFor={`${idPrefix}-${installer.id}`} className="checklist-item">
+          <input
+            id={`${idPrefix}-${installer.id}`}
+            type="checkbox"
+            checked={selectedIds.includes(installer.id)}
+            onChange={() => toggle(installer.id)}
+          />
+          {installer.fullName}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const queryClient = useQueryClient();
@@ -20,7 +52,7 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [assigningJobId, setAssigningJobId] = useState<string | null>(null);
-  const [assignInstallerId, setAssignInstallerId] = useState('');
+  const [assignInstallerIds, setAssignInstallerIds] = useState<string[]>([]);
 
   const jobsQuery = useQuery({
     queryKey: ['jobs'],
@@ -44,7 +76,7 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
       (
         await api.post<Job>('/jobs', {
           clientId: form.clientId,
-          installerId: form.installerId || undefined,
+          installerIds: form.installerIds.length > 0 ? form.installerIds : undefined,
           scheduleDate: form.scheduleDate,
           remarks: form.remarks || undefined,
         })
@@ -57,12 +89,12 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
   });
 
   const assignInstaller = useMutation({
-    mutationFn: async ({ id, installerId }: { id: string; installerId: string }) =>
-      (await api.patch<Job>(`/jobs/${id}/assign`, { installerId })).data,
+    mutationFn: async ({ id, installerIds }: { id: string; installerIds: string[] }) =>
+      (await api.patch<Job>(`/jobs/${id}/assign`, { installerIds })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       setAssigningJobId(null);
-      setAssignInstallerId('');
+      setAssignInstallerIds([]);
     },
   });
 
@@ -70,7 +102,7 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
     mutationFn: async () =>
       (await api.patch<Job>(`/jobs/${editingJobId}`, {
         clientId: editForm.clientId,
-        installerId: editForm.installerId || null,
+        installerIds: editForm.installerIds,
         scheduleDate: editForm.scheduleDate,
         remarks: editForm.remarks || null,
       })).data,
@@ -88,13 +120,20 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
 
   const handleAssignSubmit = (event: FormEvent, id: string) => {
     event.preventDefault();
-    assignInstaller.mutate({ id, installerId: assignInstallerId });
+    assignInstaller.mutate({ id, installerIds: assignInstallerIds });
   };
 
   const openEditForm = (job: Job) => {
     setEditForm({
       clientId: job.clientId,
-      installerId: job.installerId ?? '',
+      // An explicit length check, not `??`: a job assigned before it had a
+      // roster (e.g. via job-order conversion) has installers: [] rather than
+      // undefined, and `??` would leave the form empty and silently unassign it.
+      installerIds: job.installers && job.installers.length > 0
+        ? job.installers.map((row) => row.user.id)
+        : job.installerId
+          ? [job.installerId]
+          : [],
       scheduleDate: String(job.scheduleDate).slice(0, 10),
       remarks: job.remarks ?? '',
     });
@@ -141,19 +180,13 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
             />
           </div>
           <div className="field">
-            <label htmlFor="installerId">Installer (optional)</label>
-            <select
-              id="installerId"
-              value={form.installerId}
-              onChange={(e) => setForm({ ...form, installerId: e.target.value })}
-            >
-              <option value="">Assign later…</option>
-              {installersQuery.data?.map((installer) => (
-                <option key={installer.id} value={installer.id}>
-                  {installer.fullName}
-                </option>
-              ))}
-            </select>
+            <label>Installers (optional)</label>
+            <InstallerCheckboxList
+              installers={installersQuery.data ?? []}
+              selectedIds={form.installerIds}
+              onChange={(ids) => setForm({ ...form, installerIds: ids })}
+              idPrefix="create-installer"
+            />
           </div>
           <div className="field">
             <label htmlFor="scheduleDate">Schedule date</label>
@@ -201,17 +234,13 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
             />
           </div>
           <div className="field">
-            <label htmlFor="edit-installerId">Installer (optional)</label>
-            <select
-              id="edit-installerId"
-              value={editForm.installerId}
-              onChange={(event) => setEditForm({ ...editForm, installerId: event.target.value })}
-            >
-              <option value="">Unassigned</option>
-              {installersQuery.data?.map((installer) => (
-                <option key={installer.id} value={installer.id}>{installer.fullName}</option>
-              ))}
-            </select>
+            <label>Installers (optional)</label>
+            <InstallerCheckboxList
+              installers={installersQuery.data ?? []}
+              selectedIds={editForm.installerIds}
+              onChange={(ids) => setEditForm({ ...editForm, installerIds: ids })}
+              idPrefix="edit-installer"
+            />
           </div>
           <div className="field">
             <label htmlFor="edit-scheduleDate">Schedule date</label>
@@ -259,26 +288,19 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
               <div style={{ fontWeight: 600 }}>{new Date(activeJobToAssign.scheduleDate).toLocaleDateString()}</div>
             </div>
             <div className="field">
-              <label htmlFor="assign-installer">Installer</label>
-              <select
-                id="assign-installer"
-                required
-                value={assignInstallerId}
-                onChange={(e) => setAssignInstallerId(e.target.value)}
-              >
-                <option value="">Select an installer…</option>
-                {installersQuery.data?.map((installer) => (
-                  <option key={installer.id} value={installer.id}>
-                    {installer.fullName}
-                  </option>
-                ))}
-              </select>
+              <label>Installers</label>
+              <InstallerCheckboxList
+                installers={installersQuery.data ?? []}
+                selectedIds={assignInstallerIds}
+                onChange={setAssignInstallerIds}
+                idPrefix="assign-installer"
+              />
             </div>
             {assignInstaller.isError && (
               <p className="error-text" style={{ marginBottom: '1rem' }}>Failed. Try again.</p>
             )}
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
-              <button type="submit" className="btn btn-primary" disabled={assignInstaller.isPending} style={{ flex: 1 }}>
+              <button type="submit" className="btn btn-primary" disabled={assignInstaller.isPending || assignInstallerIds.length === 0} style={{ flex: 1 }}>
                 {assignInstaller.isPending ? 'Assigning…' : 'Assign'}
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => setAssigningJobId(null)}>
@@ -289,7 +311,7 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
         )}
       </Dialog>
 
-      <AdminJobsTable data={jobsQuery.data ?? []} isLoading={jobsQuery.isLoading} isError={jobsQuery.isError} isReadOnly={isReadOnly} onEdit={openEditForm} onAssign={(id, installerId) => { setAssigningJobId(id); setAssignInstallerId(installerId ?? ''); }} />
+      <AdminJobsTable data={jobsQuery.data ?? []} isLoading={jobsQuery.isLoading} isError={jobsQuery.isError} isReadOnly={isReadOnly} onEdit={openEditForm} onAssign={(id, installerIds) => { setAssigningJobId(id); setAssignInstallerIds(installerIds); }} />
     </div>
   );
 }
@@ -297,14 +319,14 @@ function AdminJobsView({ isReadOnly = false }: { isReadOnly?: boolean }) {
 function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onEdit, onAssign }: {
   data: Job[]; isLoading: boolean; isError: boolean; isReadOnly?: boolean;
   onEdit: (job: Job) => void;
-  onAssign: (id: string, installerId: string | null) => void;
+  onAssign: (id: string, installerIds: string[]) => void;
 }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const filtered = data.filter((job) =>
-    matchesSearch(search, job.client?.businessName, job.installer?.fullName, job.remarks)
+    matchesSearch(search, job.client?.businessName, job.installers?.map((row) => row.user.fullName).join(' '), job.remarks)
     && (!status || job.jobStatus === status)
     && inDateRange(job.scheduleDate, from, to),
   );
@@ -343,7 +365,13 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onEdit, 
               {pg.paginated.map((job) => (
                 <tr key={job.id}>
                   <td style={{ fontWeight: 500 }}>{job.client?.businessName ?? '—'}</td>
-                  <td>{job.installer?.fullName ?? <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>}</td>
+                  <td>
+                    {job.installers && job.installers.length > 0
+                      ? job.installers.map((row) => row.user.fullName).join(', ')
+                      : job.installer
+                        ? job.installer.fullName
+                        : <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>}
+                  </td>
                   <td>{new Date(job.scheduleDate).toLocaleDateString()}</td>
                   <td>
                     <StatusBadge status={job.jobStatus} />
@@ -361,7 +389,7 @@ function AdminJobsTable({ data, isLoading, isError, isReadOnly = false, onEdit, 
                           Edit
                         </button>
                         {(job.jobStatus === 'ASSIGNED' || !job.installerId) && (
-                          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onAssign(job.id, job.installerId ?? null)}>Assign</button>
+                          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onAssign(job.id, job.installers?.map((row) => row.user.id) ?? [])}>Assign</button>
                         )}
                       </div>
                     </td>

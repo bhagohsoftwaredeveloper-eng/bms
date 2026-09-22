@@ -103,6 +103,7 @@ export interface Job {
   remarks: string | null;
   client?: Client;
   installer?: AuthenticatedUser | null;
+  installers?: { user: { id: string; fullName: string } }[];
   license?: License | null;
   proof?: InstallationProof | null;
 }

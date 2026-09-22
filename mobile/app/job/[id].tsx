@@ -133,6 +133,9 @@ export default function JobDetailScreen() {
         <Text style={styles.meta}>Owner: {job.client?.ownerName ?? '—'}</Text>
         <Text style={styles.meta}>Contact: {job.client?.contactNo ?? '—'}</Text>
         <Text style={styles.meta}>Address: {job.client?.address ?? '—'}</Text>
+        {job.installers && job.installers.length > 1 ? (
+          <Text style={styles.meta}>Team: {job.installers.map((row) => row.user.fullName).join(', ')}</Text>
+        ) : null}
         <Text style={styles.meta}>Scheduled: {new Date(job.scheduleDate).toLocaleString()}</Text>
         <Text style={styles.status}>Status: {job.jobStatus.replace(/_/g, ' ')}</Text>
         {job.remarks ? <Text style={styles.meta}>Remarks: {job.remarks}</Text> : null}

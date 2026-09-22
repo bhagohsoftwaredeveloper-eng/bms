@@ -23,6 +23,7 @@ function buildTx() {
     job: {
       create: jest.fn().mockResolvedValue({ id: 'job-created' }),
     },
+    jobInstaller: { create: jest.fn().mockResolvedValue({}) },
     earning: { findFirst: jest.fn(), create: jest.fn() },
   };
 }
@@ -156,6 +157,11 @@ describe('JobOrdersService.convert', () => {
         installerId: 'inst-1',
       },
     });
+    // The roster row must be written too, or the job is invisible to its
+    // installer in GET /jobs and the admin edit form silently unassigns it.
+    expect(tx.jobInstaller.create).toHaveBeenCalledWith({
+      data: { jobId: 'job-created', userId: 'inst-1' },
+    });
     expect(tx.jobOrder.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'jo-1' },
@@ -174,6 +180,7 @@ describe('JobOrdersService.convert', () => {
     expect(tx.job.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ installerId: null }),
     });
+    expect(tx.jobInstaller.create).not.toHaveBeenCalled();
   });
 
   it('rejects an order that is already linked to a job', async () => {

@@ -132,7 +132,16 @@ export class KpisService implements OnModuleInit {
   // ── Auto KPIs: INSTALLER ───────────────────────────────────────────────────
 
   private async installerAutoKpis(userId: string, start: Date, end: Date) {
-    const where = { installerId: userId, scheduleDate: { gte: start, lt: end } };
+    // Incentives are split across the whole roster, so KPI credit follows the
+    // same policy: everyone assigned to the job shares it. The second branch
+    // keeps legacy/gap jobs (primary installerId, no roster rows) counted.
+    const where = {
+      OR: [
+        { installers: { some: { userId } } },
+        { installerId: userId, installers: { none: {} } },
+      ],
+      scheduleDate: { gte: start, lt: end },
+    };
     const [total, completed, withProof, completedOrLater] = await Promise.all([
       this.prisma.job.count({ where }),
       this.prisma.job.count({ where: { ...where, jobStatus: 'COMPLETED' } }),
