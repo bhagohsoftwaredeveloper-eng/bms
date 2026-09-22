@@ -152,7 +152,15 @@ export class JobsService {
     const job = await this.findOne(id);
     
     // Authorization check
-    if (role === 'INSTALLER' && job.installerId !== userId) {
+    // Fall back to installerId equality when installers is empty/undefined
+    // (legacy jobs with no JobInstaller rows yet) — note `job.installers` is
+    // always an array (never undefined) from findOne()'s include, so a plain
+    // `?? ` on `.some()`'s boolean result would never trigger for [] and must
+    // be avoided here.
+    const isAssignedInstaller = job.installers && job.installers.length > 0
+      ? job.installers.some((row) => row.userId === userId)
+      : job.installerId === userId;
+    if (role === 'INSTALLER' && !isAssignedInstaller) {
       throw new ForbiddenException('You are not assigned to this job');
     }
     // Operators can update any job status for now (usually those they are working on)
@@ -260,7 +268,12 @@ export class JobsService {
 
   private async assertOwnedByInstaller(id: string, installerId: string) {
     const job = await this.findOne(id);
-    if (job.installerId !== installerId) {
+    // Fall back to installerId equality when installers is empty/undefined
+    // (legacy jobs with no JobInstaller rows yet) — see note in updateStatus.
+    const isAssigned = job.installers && job.installers.length > 0
+      ? job.installers.some((row) => row.userId === installerId)
+      : job.installerId === installerId;
+    if (!isAssigned) {
       throw new ForbiddenException('You are not assigned to this job');
     }
     return job;

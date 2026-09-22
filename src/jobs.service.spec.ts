@@ -78,3 +78,70 @@ describe('JobsService.update', () => {
     });
   });
 });
+
+describe('JobsService.assertOwnedByInstaller (via submitProof)', () => {
+  function makeProofPrisma(installers: { userId: string }[]) {
+    const job = {
+      id: 'job-1',
+      clientId: 'client-1',
+      installerId: installers[0]?.userId ?? null,
+      client: { businessName: 'Acme' },
+      installers,
+      jobStatus: 'ON_GOING',
+    };
+    return {
+      job: {
+        findUnique: jest.fn().mockResolvedValue(job),
+        update: jest.fn().mockResolvedValue(job),
+      },
+      installationProof: { upsert: jest.fn().mockResolvedValue({}) },
+    };
+  }
+
+  it('allows a non-primary assigned installer to submit proof', async () => {
+    const prisma = makeProofPrisma([{ userId: 'lead-1' }, { userId: 'helper-1' }]);
+    const earnings = { ensureInstallationEarning: jest.fn().mockResolvedValue(null) };
+    const service = new JobsService(prisma as never, { notify: jest.fn() } as never, earnings as never);
+
+    await expect(
+      service.submitProof('job-1', 'helper-1', { photoUrls: ['a.jpg'] } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it('rejects an installer who is not assigned to the job', async () => {
+    const prisma = makeProofPrisma([{ userId: 'lead-1' }]);
+    const earnings = { ensureInstallationEarning: jest.fn().mockResolvedValue(null) };
+    const service = new JobsService(prisma as never, { notify: jest.fn() } as never, earnings as never);
+
+    await expect(
+      service.submitProof('job-1', 'stranger-1', { photoUrls: ['a.jpg'] } as never),
+    ).rejects.toThrow('You are not assigned to this job');
+  });
+
+  it('falls back to installerId match for a legacy job with an empty installers array', async () => {
+    // findOne() always includes `installers`, so a legacy job (no JobInstaller
+    // rows yet) has installers: [] rather than undefined — the fallback must
+    // still work in that case, not just when installers is literally undefined.
+    const job = {
+      id: 'job-1',
+      clientId: 'client-1',
+      installerId: 'legacy-installer-1',
+      client: { businessName: 'Acme' },
+      installers: [],
+      jobStatus: 'ON_GOING',
+    };
+    const prisma = {
+      job: {
+        findUnique: jest.fn().mockResolvedValue(job),
+        update: jest.fn().mockResolvedValue(job),
+      },
+      installationProof: { upsert: jest.fn().mockResolvedValue({}) },
+    };
+    const earnings = { ensureInstallationEarning: jest.fn().mockResolvedValue(null) };
+    const service = new JobsService(prisma as never, { notify: jest.fn() } as never, earnings as never);
+
+    await expect(
+      service.submitProof('job-1', 'legacy-installer-1', { photoUrls: ['a.jpg'] } as never),
+    ).resolves.toBeDefined();
+  });
+});
