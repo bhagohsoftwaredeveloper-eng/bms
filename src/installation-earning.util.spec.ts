@@ -1,4 +1,4 @@
-import { computeInstallationEarning, detectLocation } from './installation-earning.util';
+import { computeInstallationEarning, detectLocation, splitInstallationEarning } from './installation-earning.util';
 
 const rates = {
   INSIDE_TAGUM: { baseAmount: 500, extraAmount: 150 },
@@ -59,5 +59,23 @@ describe('computeInstallationEarning', () => {
   it('flags a missing address in the note', () => {
     const result = computeInstallationEarning({ address: null, licenseCount: 1, rates });
     expect(result.note).toBe('Inside Tagum (no address on file) · 1 computer · 500');
+  });
+});
+
+describe('splitInstallationEarning', () => {
+  it('returns the full amount unsplit for a single installer', () => {
+    expect(splitInstallationEarning(800, 1)).toEqual([800]);
+  });
+
+  it('splits evenly when the total divides cleanly', () => {
+    expect(splitInstallationEarning(900, 3)).toEqual([300, 300, 300]);
+  });
+
+  it('rounds each share to 2 decimals when the total does not divide cleanly', () => {
+    expect(splitInstallationEarning(500, 3)).toEqual([166.67, 166.67, 166.67]);
+  });
+
+  it('treats a count of zero the same as one installer', () => {
+    expect(splitInstallationEarning(800, 0)).toEqual([800]);
   });
 });

@@ -43,3 +43,15 @@ export function computeInstallationEarning(input: {
 
   return { amount: amount > 0 ? amount : 0, location, computers, note };
 }
+
+/**
+ * Splits a total installation earning equally between everyone who worked
+ * the job. Straight division, rounded to the nearest centavo per installer —
+ * the sum of shares may be off from `total` by a cent or two, which is
+ * accepted rather than corrected onto any one installer.
+ */
+export function splitInstallationEarning(total: number, installerCount: number): number[] {
+  const count = Math.max(installerCount, 1);
+  const share = Math.round((total / count) * 100) / 100;
+  return Array(count).fill(share);
+}
