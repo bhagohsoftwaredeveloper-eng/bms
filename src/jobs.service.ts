@@ -65,7 +65,10 @@ export class JobsService {
     if (installerIds.length === 0) return;
     const ids = [...new Set(installerIds)];
     const validCount = await this.prisma.user.count({
-      where: { id: { in: ids }, role: UserRole.INSTALLER },
+      where: {
+        id: { in: ids },
+        OR: [{ role: UserRole.INSTALLER }, { additionalRoles: { some: { role: UserRole.INSTALLER } } }],
+      },
     });
     if (validCount !== ids.length) {
       throw new BadRequestException('One or more selected installers are invalid.');

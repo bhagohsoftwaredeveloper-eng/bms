@@ -71,7 +71,7 @@ describe('JobsService.assignInstaller', () => {
     );
   });
 
-  it('checks that every id belongs to a user with the INSTALLER role', async () => {
+  it('checks that every id belongs to a user with the INSTALLER role, as primary or secondary', async () => {
     const prisma = makePrisma();
     const deps = makeDeps();
     const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
@@ -79,8 +79,29 @@ describe('JobsService.assignInstaller', () => {
     await service.assignInstaller('job-1', { installerIds: ['installer-1', 'installer-2'] });
 
     expect(prisma.user.count).toHaveBeenCalledWith({
-      where: { id: { in: ['installer-1', 'installer-2'] }, role: 'INSTALLER' },
+      where: {
+        id: { in: ['installer-1', 'installer-2'] },
+        OR: [{ role: 'INSTALLER' }, { additionalRoles: { some: { role: 'INSTALLER' } } }],
+      },
     });
+  });
+
+  it('accepts an id whose ONLY installer role is a secondary (additional) role', async () => {
+    // user.count is mocked, so this locks in the OR-shaped where the service
+    // sends — it does not simulate the additionalRoles join itself.
+    const prisma = makePrisma();
+    const deps = makeDeps();
+    const service = new JobsService(prisma as never, deps.notifications as never, deps.earnings as never);
+
+    await service.assignInstaller('job-1', { installerIds: ['installer-1', 'secondary-role-installer'] });
+
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['installer-1', 'secondary-role-installer'] },
+        OR: [{ role: 'INSTALLER' }, { additionalRoles: { some: { role: 'INSTALLER' } } }],
+      },
+    });
+    expect(prisma.tx.jobUpdate).toHaveBeenCalled();
   });
 
   it('rejects an id that does not belong to an installer, before writing anything', async () => {

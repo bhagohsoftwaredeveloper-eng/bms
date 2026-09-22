@@ -29,7 +29,7 @@ export class JobsController {
     const userRoles: UserRole[] = user.roles ?? [user.role];
     const isInstallerRole = userRoles.includes(UserRole.INSTALLER);
     const userId = isInstallerRole || mine === 'true' ? user.id : undefined;
-    return this.jobsService.findAll(userId, user.role);
+    return this.jobsService.findAll(userId, isInstallerRole ? UserRole.INSTALLER : user.role);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.INSTALLER, UserRole.ADMIN_STAFF, UserRole.LIAISON, UserRole.SALES_STAFF)
