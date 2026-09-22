@@ -68,6 +68,16 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data: { isActive }, select: SAFE_USER_SELECT });
   }
 
+  // Admin-set password reset — unlike updateProfile's self-service change,
+  // this needs no currentPassword: only SUPER_ADMIN can call it (see controller).
+  async resetPassword(id: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({ where: { id }, data: { passwordHash } });
+    return { success: true };
+  }
+
   // ── Admin edit any user ─────────────────────────────────────────────────────
 
   async update(id: string, dto: UpdateUserDto) {

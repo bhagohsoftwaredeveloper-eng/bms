@@ -6,6 +6,7 @@ import { Roles } from './roles.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { CreateUserDto } from './create-user.dto';
+import { ResetUserPasswordDto } from './reset-user-password.dto';
 import { UpdateProfileDto } from './update-profile.dto';
 import { UpdateUserDto } from './update-user.dto';
 import { PayrollService } from './payroll.service';
@@ -63,6 +64,12 @@ export class UsersController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Patch(':id/reset-password')
+  resetPassword(@Param('id') id: string, @Body() dto: ResetUserPasswordDto) {
+    return this.usersService.resetPassword(id, dto.newPassword);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
