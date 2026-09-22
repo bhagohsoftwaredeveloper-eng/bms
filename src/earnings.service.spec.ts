@@ -99,6 +99,9 @@ describe('EarningsService.ensureInstallationEarning', () => {
     });
     await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
 
+    // Both shares must be written atomically — a partial split would pay one
+    // installer and silently drop the other.
+    expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.earning.create).toHaveBeenCalledTimes(2);
     expect(prisma.earning.create).toHaveBeenNthCalledWith(1, {
       data: {
