@@ -337,7 +337,7 @@ function InstallationRatesPanel() {
   };
 
   return (
-    <div className="card" style={{ marginTop: '1.5rem', maxWidth: 720 }}>
+    <div className="card" style={{ marginTop: '1.5rem', maxWidth: 1040 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Installation Rates</div>
@@ -377,16 +377,16 @@ function InstallationRatesPanel() {
                 </div>
               </div>
             ))}
-          </div>
 
-          <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '1rem', background: 'var(--surface-secondary)', marginTop: '1rem', maxWidth: 280 }}>
-            <div style={{ fontWeight: 700 }}>Backoffice Extension</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>
-              Software job orders only — flat bonus, same regardless of location
-            </div>
-            <div className="field">
-              <label htmlFor="backoffice-amount">Flat bonus, if included</label>
-              <RateInput id="backoffice-amount" disabled={!canEdit} value={backofficeAmount} onChange={updateBackoffice} />
+            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '1rem', background: 'var(--surface-secondary)' }}>
+              <div style={{ fontWeight: 700 }}>Backoffice Extension</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>
+                Software job orders only — flat bonus, same regardless of location
+              </div>
+              <div className="field">
+                <label htmlFor="backoffice-amount">Flat bonus, if included</label>
+                <RateInput id="backoffice-amount" disabled={!canEdit} value={backofficeAmount} onChange={updateBackoffice} />
+              </div>
             </div>
           </div>
 
