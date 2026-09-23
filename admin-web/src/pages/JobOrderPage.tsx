@@ -376,6 +376,7 @@ export function JobOrderPage() {
   const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' as WarrantyTier });
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [includeAgreement, setIncludeAgreement] = useState(false);
+  const [includesBackofficeExtension, setIncludesBackofficeExtension] = useState(false);
 
   // ── Package insert: pick a bundle, review/trim the breakdown, then expand ──
   const [showPackageDialog, setShowPackageDialog] = useState(false);
@@ -459,6 +460,7 @@ export function JobOrderPage() {
     setLaborPct(jo.laborPct != null ? Number(jo.laborPct) : 20);
     setDocType(jo.docType ?? 'JOB_ORDER');
     setIncludeAgreement(jo.includeAgreement ?? false);
+    setIncludesBackofficeExtension(jo.includesBackofficeExtension ?? false);
   }, [jobOrderQuery.data]);
 
   // ── Auto-populate from parent record ──
@@ -501,6 +503,7 @@ export function JobOrderPage() {
           laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
           docType: doc ?? docType,
           includeAgreement,
+          includesBackofficeExtension: joType === 'SOFTWARE' ? includesBackofficeExtension : undefined,
           items: items.map(({ name, description, quantity, unitPrice, inventoryItemId, warrantyTier }) => ({
             name,
             description: description || undefined,
@@ -1043,6 +1046,19 @@ export function JobOrderPage() {
                   )}
                 </div>
               </div>
+              {joType === 'SOFTWARE' && (
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', marginBottom: '0.75rem' }}
+                  title="Adds the flat backoffice extension bonus to the installer's earning when they submit proof"
+                >
+                  <input
+                    type="checkbox"
+                    checked={includesBackofficeExtension}
+                    onChange={(e) => setIncludesBackofficeExtension(e.target.checked)}
+                  />
+                  Include backoffice extension
+                </label>
+              )}
               <div className="field">
                 <label htmlFor="jo-remarks">Remarks / Notes</label>
                 <textarea

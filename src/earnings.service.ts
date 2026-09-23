@@ -63,17 +63,37 @@ export class EarningsService {
     return rates;
   }
 
-  async saveInstallationRates(dto: UpdateInstallationRatesDto): Promise<InstallationRates> {
-    await this.prisma.$transaction(
-      LOCATIONS.map((location) =>
+  /** Flat SOFTWARE-only bonus for setting up the POS backoffice extension — same regardless of location. */
+  async getBackofficeExtensionAmount(): Promise<number> {
+    const row = await this.prisma.backofficeExtensionRate.findUnique({ where: { id: 1 } });
+    return row ? Number(row.amount) : 0;
+  }
+
+  /** Everything the Installation Rates settings card reads and writes, bundled into one response. */
+  async getPricingSettings(): Promise<InstallationRates & { backofficeExtensionAmount: number }> {
+    const [rates, backofficeExtensionAmount] = await Promise.all([
+      this.getInstallationRates(),
+      this.getBackofficeExtensionAmount(),
+    ]);
+    return { ...rates, backofficeExtensionAmount };
+  }
+
+  async saveInstallationRates(dto: UpdateInstallationRatesDto): Promise<InstallationRates & { backofficeExtensionAmount: number }> {
+    await this.prisma.$transaction([
+      ...LOCATIONS.map((location) =>
         this.prisma.installationRate.upsert({
           where: { location },
           create: { location, baseAmount: dto[location].baseAmount, extraAmount: dto[location].extraAmount },
           update: { baseAmount: dto[location].baseAmount, extraAmount: dto[location].extraAmount },
         }),
       ),
-    );
-    return this.getInstallationRates();
+      this.prisma.backofficeExtensionRate.upsert({
+        where: { id: 1 },
+        create: { id: 1, amount: dto.backofficeExtensionAmount },
+        update: { amount: dto.backofficeExtensionAmount },
+      }),
+    ]);
+    return this.getPricingSettings();
   }
 
   /**
@@ -87,7 +107,10 @@ export class EarningsService {
   async ensureInstallationEarning(jobId: string) {
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
-      include: { client: { select: { address: true } }, jobOrder: { select: { type: true } } },
+      include: {
+        client: { select: { address: true } },
+        jobOrder: { select: { type: true, includesBackofficeExtension: true } },
+      },
     });
     if (!job?.installerId) return null;
     if (job.jobOrder && job.jobOrder.type !== 'SOFTWARE') return null;
@@ -95,12 +118,18 @@ export class EarningsService {
     const existing = await this.prisma.earning.findFirst({ where: { jobId, type: 'INSTALLATION' } });
     if (existing) return null;
 
-    const [rates, licenseCount, jobInstallers] = await Promise.all([
+    const [rates, licenseCount, jobInstallers, backofficeExtensionAmount] = await Promise.all([
       this.getInstallationRates(),
       this.prisma.license.count({ where: { clientId: job.clientId, voidedAt: null } }),
       this.prisma.jobInstaller.findMany({ where: { jobId }, select: { userId: true } }),
+      this.getBackofficeExtensionAmount(),
     ]);
-    const { amount, note } = computeInstallationEarning({ address: job.client.address, licenseCount, rates });
+    const { amount, note } = computeInstallationEarning({
+      address: job.client.address,
+      licenseCount,
+      rates,
+      backofficeExtension: { included: !!job.jobOrder?.includesBackofficeExtension, amount: backofficeExtensionAmount },
+    });
     if (amount <= 0) return null;
 
     const installerIds = jobInstallers.length > 0 ? jobInstallers.map((row) => row.userId) : [job.installerId];

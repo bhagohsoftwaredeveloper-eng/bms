@@ -291,6 +291,7 @@ function InstallationRatesPanel() {
   const user = useAuthStore((s) => s.user);
   const canEdit = user?.role === 'SUPER_ADMIN';
   const [form, setForm] = useState<RateForm | null>(null);
+  const [backofficeAmount, setBackofficeAmount] = useState('');
   const [saved, setSaved] = useState(false);
 
   const ratesQuery = useQuery({
@@ -302,6 +303,7 @@ function InstallationRatesPanel() {
     if (!ratesQuery.data) return;
     const toForm = (r: InstallationRates['INSIDE_TAGUM']) => ({ baseAmount: String(r.baseAmount), extraAmount: String(r.extraAmount) });
     setForm({ INSIDE_TAGUM: toForm(ratesQuery.data.INSIDE_TAGUM), OUTSIDE_TAGUM: toForm(ratesQuery.data.OUTSIDE_TAGUM) });
+    setBackofficeAmount(String(ratesQuery.data.backofficeExtensionAmount));
   }, [ratesQuery.data]);
 
   const save = useMutation({
@@ -310,6 +312,7 @@ function InstallationRatesPanel() {
       return api.put('/earnings/installation-rates', {
         INSIDE_TAGUM: toRate(form!.INSIDE_TAGUM),
         OUTSIDE_TAGUM: toRate(form!.OUTSIDE_TAGUM),
+        backofficeExtensionAmount: Number(backofficeAmount) || 0,
       });
     },
     onSuccess: () => {
@@ -326,6 +329,11 @@ function InstallationRatesPanel() {
   const update = (key: keyof RateForm, field: 'baseAmount' | 'extraAmount', value: string) => {
     setSaved(false);
     setForm((prev) => (prev ? { ...prev, [key]: { ...prev[key], [field]: value } } : prev));
+  };
+
+  const updateBackoffice = (value: string) => {
+    setSaved(false);
+    setBackofficeAmount(value);
   };
 
   return (
@@ -371,9 +379,21 @@ function InstallationRatesPanel() {
             ))}
           </div>
 
+          <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '1rem', background: 'var(--surface-secondary)', marginTop: '1rem', maxWidth: 280 }}>
+            <div style={{ fontWeight: 700 }}>Backoffice Extension</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>
+              Software job orders only — flat bonus, same regardless of location
+            </div>
+            <div className="field">
+              <label htmlFor="backoffice-amount">Flat bonus, if included</label>
+              <RateInput id="backoffice-amount" disabled={!canEdit} value={backofficeAmount} onChange={updateBackoffice} />
+            </div>
+          </div>
+
           <p style={{ margin: '0.9rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             Location is read from the client&apos;s address (contains &quot;Tagum&quot; = inside). Computers = the client&apos;s
-            active licenses. Leave both rates at 0 to turn auto-earnings off.
+            active licenses. Leave both rates at 0 to turn auto-earnings off. The backoffice extension bonus is added
+            only when a software job order has &quot;Include backoffice extension&quot; checked.
           </p>
 
           {canEdit ? (

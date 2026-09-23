@@ -30,16 +30,23 @@ export function computeInstallationEarning(input: {
   address: string | null | undefined;
   licenseCount: number;
   rates: InstallationRates;
+  /** SOFTWARE-only flat bonus for setting up the POS backoffice extension. */
+  backofficeExtension?: { included: boolean; amount: number };
 }): InstallationEarningResult {
   const location = detectLocation(input.address);
   const computers = Math.max(input.licenseCount, 1);
   const { baseAmount, extraAmount } = input.rates[location];
   const extraComputers = computers - 1;
-  const amount = baseAmount + extraComputers * extraAmount;
+  const backofficeAmount =
+    input.backofficeExtension?.included && input.backofficeExtension.amount > 0
+      ? input.backofficeExtension.amount
+      : 0;
+  const amount = baseAmount + extraComputers * extraAmount + backofficeAmount;
 
   const noAddress = !(input.address ?? '').trim();
   const formula = extraComputers > 0 ? `${baseAmount} + ${extraComputers} × ${extraAmount}` : `${baseAmount}`;
-  const note = `${LOCATION_LABEL[location]}${noAddress ? ' (no address on file)' : ''} · ${computers} computer${computers !== 1 ? 's' : ''} · ${formula}`;
+  const backofficeNote = backofficeAmount > 0 ? ` + ₱${backofficeAmount} backoffice extension` : '';
+  const note = `${LOCATION_LABEL[location]}${noAddress ? ' (no address on file)' : ''} · ${computers} computer${computers !== 1 ? 's' : ''} · ${formula}${backofficeNote}`;
 
   return { amount: amount > 0 ? amount : 0, location, computers, note };
 }

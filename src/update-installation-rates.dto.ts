@@ -19,4 +19,9 @@ export class UpdateInstallationRatesDto {
   @ValidateNested()
   @Type(() => InstallationRateDto)
   OUTSIDE_TAGUM!: InstallationRateDto;
+
+  /** Flat SOFTWARE-only bonus for setting up the POS backoffice extension. */
+  @IsNumber()
+  @Min(0)
+  backofficeExtensionAmount!: number;
 }

@@ -91,6 +91,16 @@ model InstallationRate {
   @@map("installation_rates")
 }
 
+// Singleton (id is always 1): flat installer bonus for setting up the POS
+// backoffice extension on a SOFTWARE job order, same regardless of location.
+model BackofficeExtensionRate {
+  id        Int      @id @default(1)
+  amount    Decimal  @default(0) @map("amount") @db.Decimal(12, 2)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("backoffice_extension_rate")
+}
+
 enum WithdrawalMethod {
   GCASH
   MAYA
@@ -466,6 +476,9 @@ model JobOrder {
   cameraRate   Decimal?       @map("camera_rate") @db.Decimal(12, 2)
   laborPct     Decimal?       @map("labor_pct") @db.Decimal(5, 2)
   docType      DocType        @default(JOB_ORDER) @map("doc_type")
+
+  /** SOFTWARE orders only: whether this install includes setting up the POS backoffice extension. */
+  includesBackofficeExtension Boolean @default(false) @map("includes_backoffice_extension")
 
   includeAgreement   Boolean @default(false) @map("include_agreement")
   /** Pinned on first print; null means the order still follows the latest version. */

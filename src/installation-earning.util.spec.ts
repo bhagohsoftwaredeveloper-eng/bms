@@ -60,6 +60,50 @@ describe('computeInstallationEarning', () => {
     const result = computeInstallationEarning({ address: null, licenseCount: 1, rates });
     expect(result.note).toBe('Inside Tagum (no address on file) · 1 computer · 500');
   });
+
+  it('adds the flat backoffice extension amount when included', () => {
+    const result = computeInstallationEarning({
+      address: 'Tagum City',
+      licenseCount: 1,
+      rates,
+      backofficeExtension: { included: true, amount: 1000 },
+    });
+    expect(result.amount).toBe(1500);
+    expect(result.note).toBe('Inside Tagum · 1 computer · 500 + ₱1000 backoffice extension');
+  });
+
+  it('does not add the backoffice extension amount when not included, even if configured', () => {
+    const result = computeInstallationEarning({
+      address: 'Tagum City',
+      licenseCount: 1,
+      rates,
+      backofficeExtension: { included: false, amount: 1000 },
+    });
+    expect(result.amount).toBe(500);
+    expect(result.note).toBe('Inside Tagum · 1 computer · 500');
+  });
+
+  it('combines the per-computer formula and the backoffice extension in the note', () => {
+    const result = computeInstallationEarning({
+      address: 'Panabo City',
+      licenseCount: 4,
+      rates,
+      backofficeExtension: { included: true, amount: 750 },
+    });
+    expect(result.amount).toBe(900 + 3 * 250 + 750);
+    expect(result.note).toBe('Outside Tagum · 4 computers · 900 + 3 × 250 + ₱750 backoffice extension');
+  });
+
+  it('omits the backoffice extension from the note when the configured amount is zero', () => {
+    const result = computeInstallationEarning({
+      address: 'Tagum City',
+      licenseCount: 1,
+      rates,
+      backofficeExtension: { included: true, amount: 0 },
+    });
+    expect(result.amount).toBe(500);
+    expect(result.note).toBe('Inside Tagum · 1 computer · 500');
+  });
 });
 
 describe('splitInstallationEarning', () => {
