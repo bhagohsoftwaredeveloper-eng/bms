@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EarningStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
+import { EventsService } from './events.service';
 import { CreateEarningDto } from './create-earning.dto';
 import { computeInstallationEarning, splitInstallationEarning, type InstallationRates, type TagumLocation } from './installation-earning.util';
 import type { UpdateInstallationRatesDto } from './update-installation-rates.dto';
@@ -21,7 +22,10 @@ const ALLOWED_FROM: Record<EarningStatus, EarningStatus[]> = {
 
 @Injectable()
 export class EarningsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventsService,
+  ) {}
 
   create(dto: CreateEarningDto) {
     return this.prisma.earning.create({ data: dto });
@@ -144,6 +148,13 @@ export class EarningsService {
         }),
       ),
     );
+
+    // This earning is created internally (from the installer's proof submission,
+    // not a request to /earnings), so the audit-log interceptor never sees it and
+    // never fires its usual broadcast. Emit it here instead, so the admin
+    // sidebar's Earnings badge actually lights up for a new Pending earning.
+    this.events.emit({ resource: 'earnings', module: 'Earning', action: 'created' });
+
     return created;
   }
 
