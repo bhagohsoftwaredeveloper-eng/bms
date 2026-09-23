@@ -46,6 +46,7 @@ export interface Client {
   address: string | null;
   status: ClientStatus;
   clientType: ClientType;
+  computerCount: number | null;
   createdAt: string;
 }
 

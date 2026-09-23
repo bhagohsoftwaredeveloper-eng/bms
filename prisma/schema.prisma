@@ -230,6 +230,8 @@ model Client {
   address      String?
   status       ClientStatus @default(ACTIVE)
   clientType   ClientType   @default(SOFTWARE) @map("client_type")
+  /** How many computers/terminals this business runs — tracked independently of license count. */
+  computerCount Int?        @map("computer_count")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

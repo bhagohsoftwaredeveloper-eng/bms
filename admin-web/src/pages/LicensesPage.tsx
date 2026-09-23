@@ -255,11 +255,13 @@ function useExpandedGroups(forceExpanded: boolean) {
   return { isExpanded, toggle };
 }
 
-function GroupHeaderRow({ colSpan, title, subtitle, count, expanded, onToggle, action }: {
+function GroupHeaderRow({ colSpan, title, subtitle, count, computerCount, expanded, onToggle, action }: {
   colSpan: number;
   title: string;
   subtitle?: string;
   count: number;
+  /** Computers the business runs, tracked independently of license count. Omit where not applicable. */
+  computerCount?: number | null;
   expanded: boolean;
   onToggle: () => void;
   action?: ReactNode;
@@ -282,6 +284,11 @@ function GroupHeaderRow({ colSpan, title, subtitle, count, expanded, onToggle, a
             <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontWeight: 400 }}>
               {count} license{count !== 1 ? 's' : ''}
             </span>
+            {computerCount != null && (
+              <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                · {computerCount} computer{computerCount !== 1 ? 's' : ''}
+              </span>
+            )}
           </button>
           {action}
         </div>
@@ -981,7 +988,7 @@ export function LicensesPage() {
     return matchSearch && matchStatus;
   });
 
-  const groupedLicenses = filteredLicenses.reduce<Array<{ clientId: string; clientName: string; licenses: License[] }>>((groups, license) => {
+  const groupedLicenses = filteredLicenses.reduce<Array<{ clientId: string; clientName: string; computerCount: number | null; licenses: License[] }>>((groups, license) => {
     const existing = groups.find((group) => group.clientId === license.clientId);
     if (existing) {
       existing.licenses.push(license);
@@ -989,6 +996,7 @@ export function LicensesPage() {
       groups.push({
         clientId: license.clientId,
         clientName: license.client?.businessName ?? 'Unknown client',
+        computerCount: license.client?.computerCount ?? null,
         licenses: [license],
       });
     }
@@ -1429,6 +1437,7 @@ export function LicensesPage() {
                               colSpan={8}
                               title={group.clientName}
                               count={group.licenses.length}
+                              computerCount={group.computerCount}
                               expanded={isExpanded(group.clientId)}
                               onToggle={() => toggleClient(group.clientId)}
                               action={!isDeveloper && (
