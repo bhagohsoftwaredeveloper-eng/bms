@@ -525,17 +525,18 @@ function NenposClientsTab() {
                       <th>Expiry Date</th>
                       <th>Installer</th>
                       <th>Address</th>
+                      <th>Notes</th>
                       <th style={{ textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
-                      <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No records match your search.</td></tr>
+                      <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No records match your search.</td></tr>
                     ) : (
                       paginated.flatMap((group) => [
                         <GroupHeaderRow
                           key={`group-${group.key}`}
-                          colSpan={8}
+                          colSpan={9}
                           title={group.clientName}
                           subtitle={group.clientId || undefined}
                           count={group.rows.length}
@@ -573,6 +574,9 @@ function NenposClientsTab() {
                           <td style={{ whiteSpace: 'nowrap' }}>{row.installer ?? '—'}</td>
                           <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.address ?? ''}>
                             {row.address ?? '—'}
+                          </td>
+                          <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={row.notes ?? ''}>
+                            {row.notes ?? '—'}
                           </td>
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <RowActionsMenu
