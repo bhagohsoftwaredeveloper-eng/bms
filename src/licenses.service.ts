@@ -58,6 +58,7 @@ export class LicensesService {
           trialDays: daysBetween(new Date(), dto.expirationDate),
           expirationDate: dto.expirationDate,
           status: LicenseStatus.PENDING,
+          notes: dto.notes?.trim() || null,
         },
       });
     }
@@ -80,6 +81,7 @@ export class LicensesService {
         productId: dto.productId,
         expirationDate: dto.expirationDate,
         status: LicenseStatus.PENDING,
+        notes: dto.notes?.trim() || null,
       },
     });
   }
@@ -283,11 +285,13 @@ export class LicensesService {
       trialDays?: number | null;
       expirationDate?: Date | null;
       status?: LicenseStatus;
+      notes?: string | null;
     } = {};
 
     if (dto.licenseKey !== undefined) data.licenseKey = dto.licenseKey;
     if (dto.clientId !== undefined) data.clientId = dto.clientId;
     if (dto.productId !== undefined) data.productId = dto.productId;
+    if (dto.notes !== undefined) data.notes = dto.notes.trim() || null;
 
     if (dto.isTrial !== undefined) data.isTrial = newIsTrial;
 

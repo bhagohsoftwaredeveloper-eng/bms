@@ -841,12 +841,13 @@ export function LicensesPage() {
   const [licenseKey, setLicenseKey] = useState('');
   const [isTrial, setIsTrial] = useState(false);
   const [trialExpiresAt, setTrialExpiresAt] = useState(defaultTrialDate());
+  const [notes, setNotes] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState(EMPTY_FINGERPRINT_FORM);
   const [viewLicense, setViewLicense] = useState<License | null>(null);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
-  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, expirationDate: defaultTrialDate() });
+  const [editForm, setEditForm] = useState({ licenseKey: '', clientId: '', productId: '', isTrial: false, expirationDate: defaultTrialDate(), notes: '' });
   const [editError, setEditError] = useState('');
   const [licSearch, setLicSearch] = useState('');
   const [licStatus, setLicStatus] = useState('');
@@ -879,14 +880,14 @@ export function LicensesPage() {
   const generateLicense = useMutation({
     mutationFn: async () => {
       const payload = isTrial
-        ? { clientId, productId, isTrial: true, expirationDate: new Date(`${trialExpiresAt}T23:59:59`).toISOString() }
-        : { clientId, productId, licenseKey: licenseKey.trim() };
+        ? { clientId, productId, isTrial: true, expirationDate: new Date(`${trialExpiresAt}T23:59:59`).toISOString(), notes: notes.trim() || undefined }
+        : { clientId, productId, licenseKey: licenseKey.trim(), notes: notes.trim() || undefined };
       return (await api.post<License>('/licenses', payload)).data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['licenses'] });
       setClientId(''); setProductId(''); setLicenseKey('');
-      setIsTrial(false); setTrialExpiresAt(defaultTrialDate());
+      setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); setNotes('');
       setGenerateError(''); setShowForm(false);
     },
     onError: (err: any) => {
@@ -928,6 +929,7 @@ export function LicensesPage() {
       productId: license.productId,
       isTrial: license.isTrial,
       expirationDate: license.expirationDate ? toIsoDateLocal(new Date(license.expirationDate)) : defaultTrialDate(),
+      notes: license.notes ?? '',
     });
     setEditError('');
   };
@@ -938,6 +940,7 @@ export function LicensesPage() {
         clientId: editForm.clientId,
         productId: editForm.productId,
         isTrial: editForm.isTrial,
+        notes: editForm.notes.trim(),
         ...(editForm.isTrial ? { expirationDate: new Date(`${editForm.expirationDate}T23:59:59`).toISOString() } : { licenseKey: editForm.licenseKey.trim() }),
       };
       return (await api.patch<License>(`/licenses/${editingLicense!.id}`, payload)).data;
@@ -972,7 +975,7 @@ export function LicensesPage() {
 
   const filteredLicenses = allLicenses.filter((l) => {
     const q = licSearch.toLowerCase();
-    const matchSearch = !q || [l.licenseKey, l.client?.businessName, l.product?.productName]
+    const matchSearch = !q || [l.licenseKey, l.client?.businessName, l.product?.productName, l.notes]
       .some((v) => v?.toLowerCase().includes(q));
     const matchStatus = !licStatus || l.status === licStatus;
     return matchSearch && matchStatus;
@@ -1039,7 +1042,7 @@ export function LicensesPage() {
       {activeTab === 'licenses' && (
         <>
           {/* Add license dialog */}
-          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); }} title="Add License" maxWidth={480}>
+          <Dialog isOpen={showForm && !isDeveloper} onClose={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); setNotes(''); }} title="Add License" maxWidth={480}>
             <form onSubmit={(e) => { e.preventDefault(); generateLicense.mutate(); }}>
               <div className="field">
                 <label>License type</label>
@@ -1108,12 +1111,16 @@ export function LicensesPage() {
                   </p>
                 </div>
               )}
+              <div className="field">
+                <label htmlFor="license-notes">Notes (optional)</label>
+                <textarea id="license-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
               {generateError && <p className="error-text">{generateError}</p>}
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
                 <button type="submit" className="btn btn-primary" disabled={generateLicense.isPending} style={{ flex: 1 }}>
                   {generateLicense.isPending ? 'Saving…' : 'Save license'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); }}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setGenerateError(''); setIsTrial(false); setTrialExpiresAt(defaultTrialDate()); setNotes(''); }}>Cancel</button>
               </div>
             </form>
           </Dialog>
@@ -1173,6 +1180,9 @@ export function LicensesPage() {
                 <LicenseDateDetails license={viewLicense} />
                 {viewLicense.activatedById && (
                   <DetailRow label="Activated By (ID)" value={<span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{viewLicense.activatedById}</span>} />
+                )}
+                {viewLicense.notes && (
+                  <DetailRow label="Notes" value={<span style={{ whiteSpace: 'pre-wrap', color: 'var(--text-muted)' }}>{viewLicense.notes}</span>} />
                 )}
               </div>
             )}
@@ -1250,6 +1260,10 @@ export function LicensesPage() {
                     />
                   </div>
                 )}
+                <div className="field">
+                  <label htmlFor="edit-notes">Notes (optional)</label>
+                  <textarea id="edit-notes" rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+                </div>
                 {editError && <p className="error-text">{editError}</p>}
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
                   <button type="submit" className="btn btn-primary" disabled={updateLicense.isPending} style={{ flex: 1 }}>
@@ -1377,7 +1391,7 @@ export function LicensesPage() {
               search={licSearch} onSearch={setLicSearch}
               statusOptions={['PENDING', 'ACTIVATED', 'EXPIRED', 'SUSPENDED']}
               status={licStatus} onStatus={setLicStatus}
-              placeholder="Search by client, license key, or product…"
+              placeholder="Search by client, license key, product, or notes…"
             />
           )}
 
@@ -1401,17 +1415,18 @@ export function LicensesPage() {
                           <th>Status</th>
                           <th>Installed</th>
                           <th>Expires</th>
+                          <th>Notes</th>
                           <th style={{ textAlign: 'right' }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedClientGroups.length === 0 ? (
-                          <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No licenses match your search.</td></tr>
+                          <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No licenses match your search.</td></tr>
                         ) : (
                           paginatedClientGroups.flatMap((group) => [
                             <GroupHeaderRow
                               key={`client-${group.clientId}`}
-                              colSpan={7}
+                              colSpan={8}
                               title={group.clientName}
                               count={group.licenses.length}
                               expanded={isExpanded(group.clientId)}
@@ -1447,6 +1462,9 @@ export function LicensesPage() {
                               </td>
                               <td><StatusBadge status={license.status} /></td>
                               <LicenseDateCells license={license} />
+                              <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={license.notes ?? ''}>
+                                {license.notes ?? '—'}
+                              </td>
                               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                                 <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
                                   {!license.voidedAt && isDeveloper && license.status === 'PENDING' && (

@@ -32,4 +32,8 @@ export class GenerateLicenseDto {
   @Type(() => Date)
   @IsDate()
   expirationDate?: Date;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
