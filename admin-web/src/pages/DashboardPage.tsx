@@ -757,7 +757,7 @@ function QuickActions() {
           <div className="field">
             <label>Client type</label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {(['SOFTWARE', 'ADVERTISING'] as const).map((t) => (
+              {(['SOFTWARE'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"

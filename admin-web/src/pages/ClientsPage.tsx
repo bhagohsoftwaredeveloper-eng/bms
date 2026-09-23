@@ -37,7 +37,7 @@ function toEditForm(c: Client) {
 function ClientTypeToggle({ value, onChange }: { value: ClientType; onChange: (t: ClientType) => void }) {
   return (
     <div style={{ display: 'flex', gap: '0.5rem' }}>
-      {(['SOFTWARE', 'ADVERTISING'] as ClientType[]).map((t) => (
+      {(['SOFTWARE'] as ClientType[]).map((t) => (
         <button
           key={t}
           type="button"
