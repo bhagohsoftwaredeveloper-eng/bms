@@ -52,6 +52,7 @@ export class JobOrdersService {
       laborPct: dto.laborPct ?? null,
       docType: dto.docType ?? DocType.JOB_ORDER,
       includeAgreement: dto.includeAgreement ?? false,
+      includesBackofficeExtension: dto.includesBackofficeExtension ?? false,
     };
     const newCompleted = data.status === JobOrderStatus.COMPLETED;
 

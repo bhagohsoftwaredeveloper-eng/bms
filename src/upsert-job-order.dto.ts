@@ -108,6 +108,11 @@ export class UpsertJobOrderDto {
   @IsBoolean()
   includeAgreement?: boolean;
 
+  /** SOFTWARE orders only: whether this install includes setting up the POS backoffice extension. */
+  @IsOptional()
+  @IsBoolean()
+  includesBackofficeExtension?: boolean;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => JobOrderItemDto)

@@ -162,6 +162,8 @@ export interface InstallationRate {
 export interface InstallationRates {
   INSIDE_TAGUM: InstallationRate;
   OUTSIDE_TAGUM: InstallationRate;
+  /** Flat SOFTWARE-only bonus for setting up the POS backoffice extension. */
+  backofficeExtensionAmount: number;
 }
 
 export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'RELEASED';
@@ -217,6 +219,7 @@ export interface JobOrder {
   laborPct: string | null;
   docType: DocumentType;
   includeAgreement: boolean;
+  includesBackofficeExtension: boolean;
   agreementVersionId: string | null;
   agreementVersion?: AgreementVersion | null;
   createdAt: string;

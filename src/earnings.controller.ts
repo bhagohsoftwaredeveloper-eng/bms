@@ -23,7 +23,7 @@ export class EarningsController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Get('installation-rates')
   getInstallationRates() {
-    return this.earningsService.getInstallationRates();
+    return this.earningsService.getPricingSettings();
   }
 
   @Roles(UserRole.SUPER_ADMIN)

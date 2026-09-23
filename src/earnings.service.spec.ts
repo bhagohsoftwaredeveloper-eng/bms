@@ -6,6 +6,7 @@ function makePrisma(overrides: {
   licenseCount?: number;
   rates?: Array<{ location: string; baseAmount: number; extraAmount: number }>;
   installers?: Array<{ userId: string }>;
+  backofficeExtensionRate?: { amount: number } | null;
 } = {}) {
   const job = 'job' in overrides
     ? overrides.job
@@ -25,6 +26,11 @@ function makePrisma(overrides: {
           { location: 'INSIDE_TAGUM', baseAmount: 500, extraAmount: 150 },
           { location: 'OUTSIDE_TAGUM', baseAmount: 900, extraAmount: 250 },
         ],
+      ),
+    },
+    backofficeExtensionRate: {
+      findUnique: jest.fn().mockResolvedValue(
+        'backofficeExtensionRate' in overrides ? overrides.backofficeExtensionRate : { amount: 1000 },
       ),
     },
   };
@@ -137,5 +143,57 @@ describe('EarningsService.ensureInstallationEarning', () => {
         note: 'Inside Tagum · 1 computer · 500',
       },
     });
+  });
+
+  it('adds the backoffice extension bonus when the SOFTWARE job order includes it', async () => {
+    const prisma = makePrisma({
+      licenseCount: 1,
+      job: {
+        id: 'job-1', clientId: 'c', installerId: 'i', client: { address: 'Tagum City' },
+        jobOrder: { type: 'SOFTWARE', includesBackofficeExtension: true },
+      },
+    });
+    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+
+    expect(prisma.earning.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'i',
+        jobId: 'job-1',
+        amount: 1500,
+        type: 'INSTALLATION',
+        note: 'Inside Tagum · 1 computer · 500 + ₱1000 backoffice extension',
+      },
+    });
+  });
+
+  it('does not add the backoffice extension bonus when the job order does not include it', async () => {
+    const prisma = makePrisma({
+      licenseCount: 1,
+      job: {
+        id: 'job-1', clientId: 'c', installerId: 'i', client: { address: 'Tagum City' },
+        jobOrder: { type: 'SOFTWARE', includesBackofficeExtension: false },
+      },
+    });
+    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+
+    expect(prisma.earning.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ amount: 500 }) }),
+    );
+  });
+
+  it('treats an unconfigured backoffice extension rate as zero', async () => {
+    const prisma = makePrisma({
+      licenseCount: 1,
+      backofficeExtensionRate: null,
+      job: {
+        id: 'job-1', clientId: 'c', installerId: 'i', client: { address: 'Tagum City' },
+        jobOrder: { type: 'SOFTWARE', includesBackofficeExtension: true },
+      },
+    });
+    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+
+    expect(prisma.earning.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ amount: 500 }) }),
+    );
   });
 });
