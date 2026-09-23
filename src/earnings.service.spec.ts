@@ -1,5 +1,9 @@
 import { EarningsService } from './earnings.service';
 
+function makeEvents() {
+  return { emit: jest.fn() };
+}
+
 function makePrisma(overrides: {
   job?: unknown;
   existingEarning?: unknown;
@@ -39,7 +43,7 @@ function makePrisma(overrides: {
 describe('EarningsService.ensureInstallationEarning', () => {
   it('creates a PENDING INSTALLATION earning from the client address and license count', async () => {
     const prisma = makePrisma({ licenseCount: 3 });
-    const service = new EarningsService(prisma as never);
+    const service = new EarningsService(prisma as never, makeEvents() as never);
 
     await service.ensureInstallationEarning('job-1');
 
@@ -59,7 +63,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
     const prisma = makePrisma({
       job: { id: 'job-1', clientId: 'c', installerId: 'i', client: { address: 'Panabo City' }, jobOrder: null },
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
     expect(prisma.earning.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ amount: 900 }) }),
     );
@@ -67,7 +71,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
 
   it('does nothing when an installation earning already exists for the job', async () => {
     const prisma = makePrisma({ existingEarning: { id: 'e1' } });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
     expect(prisma.earning.create).not.toHaveBeenCalled();
   });
 
@@ -75,7 +79,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
     const prisma = makePrisma({
       job: { id: 'job-1', clientId: 'c', installerId: null, client: { address: 'Tagum' }, jobOrder: null },
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
     expect(prisma.earning.create).not.toHaveBeenCalled();
   });
 
@@ -83,7 +87,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
     const prisma = makePrisma({
       job: { id: 'job-1', clientId: 'c', installerId: 'i', client: { address: 'Tagum' }, jobOrder: { type: 'CCTV' } },
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
     expect(prisma.earning.create).not.toHaveBeenCalled();
   });
 
@@ -94,7 +98,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
         { location: 'OUTSIDE_TAGUM', baseAmount: 0, extraAmount: 0 },
       ],
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
     expect(prisma.earning.create).not.toHaveBeenCalled();
   });
 
@@ -103,7 +107,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
       licenseCount: 1,
       installers: [{ userId: 'installer-1' }, { userId: 'installer-2' }],
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
 
     // Both shares must be written atomically — a partial split would pay one
     // installer and silently drop the other.
@@ -131,7 +135,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
 
   it('falls back to the legacy single-earner behavior when there are no JobInstaller rows', async () => {
     const prisma = makePrisma({ licenseCount: 1, installers: [] });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
 
     expect(prisma.earning.create).toHaveBeenCalledTimes(1);
     expect(prisma.earning.create).toHaveBeenCalledWith({
@@ -153,7 +157,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
         jobOrder: { type: 'SOFTWARE', includesBackofficeExtension: true },
       },
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
 
     expect(prisma.earning.create).toHaveBeenCalledWith({
       data: {
@@ -174,7 +178,7 @@ describe('EarningsService.ensureInstallationEarning', () => {
         jobOrder: { type: 'SOFTWARE', includesBackofficeExtension: false },
       },
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
 
     expect(prisma.earning.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ amount: 500 }) }),
@@ -190,10 +194,41 @@ describe('EarningsService.ensureInstallationEarning', () => {
         jobOrder: { type: 'SOFTWARE', includesBackofficeExtension: true },
       },
     });
-    await new EarningsService(prisma as never).ensureInstallationEarning('job-1');
+    await new EarningsService(prisma as never, makeEvents() as never).ensureInstallationEarning('job-1');
 
     expect(prisma.earning.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ amount: 500 }) }),
     );
+  });
+
+  it('emits an earnings event so the admin sidebar badges as new, once an earning is actually created', async () => {
+    const prisma = makePrisma({ licenseCount: 1 });
+    const events = makeEvents();
+    await new EarningsService(prisma as never, events as never).ensureInstallationEarning('job-1');
+
+    expect(events.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: 'earnings', module: 'Earning', action: 'created' }),
+    );
+  });
+
+  it('does not emit when the earning already existed for the job', async () => {
+    const prisma = makePrisma({ existingEarning: { id: 'e1' } });
+    const events = makeEvents();
+    await new EarningsService(prisma as never, events as never).ensureInstallationEarning('job-1');
+
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not emit when no earning is created (rates unconfigured)', async () => {
+    const prisma = makePrisma({
+      rates: [
+        { location: 'INSIDE_TAGUM', baseAmount: 0, extraAmount: 0 },
+        { location: 'OUTSIDE_TAGUM', baseAmount: 0, extraAmount: 0 },
+      ],
+    });
+    const events = makeEvents();
+    await new EarningsService(prisma as never, events as never).ensureInstallationEarning('job-1');
+
+    expect(events.emit).not.toHaveBeenCalled();
   });
 });
