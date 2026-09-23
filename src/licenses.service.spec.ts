@@ -17,8 +17,9 @@ function buildService() {
     },
   };
   const crypto = { signLicenseToken: jest.fn().mockReturnValue('signed-token') };
-  const service = new LicensesService(prisma as never, crypto as never);
-  return { service, prisma, crypto };
+  const auth = { verifyPassword: jest.fn().mockResolvedValue(undefined) };
+  const service = new LicensesService(prisma as never, crypto as never, auth as never);
+  return { service, prisma, crypto, auth };
 }
 
 describe('LicensesService.generate (trial)', () => {

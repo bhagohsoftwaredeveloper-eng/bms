@@ -634,12 +634,20 @@ export function JobOrderPage() {
 
   const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
 
+  // A category with no jobOrderType, and an item with no category at all, both
+  // mean "usable on any job" — so they show regardless of the order's type.
+  // Scanning a barcode (handleScan) skips this filter by design: a mis-shelved
+  // item should still be addable once it's in hand.
+  const pickerItems = (inventoryQuery.data ?? []).filter(
+    (item) => item.category?.jobOrderType == null || item.category.jobOrderType === joType,
+  );
+
   // The search box doubles as a filter: an unmatched barcode still submits on
   // Enter, so filtering the results costs nothing. Only show results once the
   // user has typed something — an empty query shows nothing.
   const itemQuery = scanCode.trim().toLowerCase();
   const quickAddItems = itemQuery
-    ? (inventoryQuery.data ?? []).filter((i) => i.name.toLowerCase().includes(itemQuery))
+    ? pickerItems.filter((i) => i.name.toLowerCase().includes(itemQuery))
     : [];
   // Typing "package 1" in the same box offers the matching bundle first.
   const quickAddPackages = itemQuery
@@ -1086,6 +1094,12 @@ export function JobOrderPage() {
                 {inventoryQuery.data?.length === 0 && (
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                     No inventory items yet. Add them under Settings → Inventory Management.
+                  </p>
+                )}
+                {(inventoryQuery.data?.length ?? 0) > 0 && pickerItems.length === 0 && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                    No items are set up for {joType} job orders yet. Assign a category with this
+                    job order type under Settings → Inventory Management, or scan a barcode above.
                   </p>
                 )}
 

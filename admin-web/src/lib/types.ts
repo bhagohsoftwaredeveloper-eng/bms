@@ -46,6 +46,7 @@ export interface Client {
   address: string | null;
   status: ClientStatus;
   clientType: ClientType;
+  computerCount: number | null;
   createdAt: string;
 }
 
@@ -73,6 +74,7 @@ export interface License {
   expirationDate: string | null;
   isTrial: boolean;
   trialDays: number | null;
+  notes: string | null;
   voidedAt: string | null;
   voidReason: string | null;
   transferredToNenposClientId: string | null;

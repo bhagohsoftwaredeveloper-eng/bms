@@ -18,7 +18,7 @@ function generateClientCode(): string {
   return code;
 }
 
-const EMPTY_FORM = { clientCode: '', businessName: '', ownerName: '', contactNo: '', email: '', address: '', clientType: 'SOFTWARE' as ClientType };
+const EMPTY_FORM = { clientCode: '', businessName: '', ownerName: '', contactNo: '', email: '', address: '', clientType: 'SOFTWARE' as ClientType, computerCount: '' };
 
 function toEditForm(c: Client) {
   return {
@@ -30,6 +30,7 @@ function toEditForm(c: Client) {
     address: c.address ?? '',
     status: c.status,
     clientType: c.clientType,
+    computerCount: c.computerCount != null ? String(c.computerCount) : '',
   };
 }
 
@@ -74,7 +75,11 @@ export function ClientsPage() {
 
   const createClient = useMutation({
     mutationFn: async () =>
-      (await api.post<Client>('/clients', { ...form, email: form.email.trim() || undefined })).data,
+      (await api.post<Client>('/clients', {
+        ...form,
+        email: form.email.trim() || undefined,
+        computerCount: form.computerCount === '' ? undefined : Number(form.computerCount),
+      })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setForm(EMPTY_FORM);
@@ -84,7 +89,11 @@ export function ClientsPage() {
 
   const updateClient = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof editForm }) =>
-      (await api.patch<Client>(`/clients/${id}`, { ...data, email: data?.email.trim() || undefined })).data,
+      (await api.patch<Client>(`/clients/${id}`, {
+        ...data,
+        email: data?.email.trim() || undefined,
+        computerCount: data?.computerCount === '' ? null : Number(data?.computerCount),
+      })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setEditingClient(null);
@@ -215,6 +224,16 @@ export function ClientsPage() {
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </div>
+            <div className="field">
+              <label htmlFor="computerCount">No. of computers</label>
+              <input
+                id="computerCount"
+                type="number"
+                min={0}
+                value={form.computerCount}
+                onChange={(e) => setForm({ ...form, computerCount: e.target.value })}
+              />
+            </div>
           </div>
           {createClient.isError && <p className="error-text">Could not create the client. Check the fields and try again.</p>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
@@ -292,6 +311,16 @@ export function ClientsPage() {
                   id="edit-address"
                   value={editForm.address}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="edit-computerCount">No. of computers</label>
+                <input
+                  id="edit-computerCount"
+                  type="number"
+                  min={0}
+                  value={editForm.computerCount}
+                  onChange={(e) => setEditForm({ ...editForm, computerCount: e.target.value })}
                 />
               </div>
               <div className="field" style={{ gridColumn: '1 / -1' }}>

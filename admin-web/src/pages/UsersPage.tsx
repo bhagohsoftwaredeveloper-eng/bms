@@ -1,4 +1,5 @@
 import { type FormEvent, useState, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
@@ -71,6 +72,56 @@ function RoleChip({ role, onRemove }: { role: UserRole; onRemove?: () => void })
         </button>
       )}
     </span>
+  );
+}
+
+// ── Password field with show/hide toggle ──────────────────────────────────────
+
+function PasswordField({ id, label, value, onChange, autoComplete }: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete?: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        <input
+          id={id}
+          type={show ? 'text' : 'password'}
+          required
+          minLength={8}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ paddingRight: '2.4rem' }}
+        />
+        <button
+          type="button"
+          onClick={() => setShow((v) => !v)}
+          aria-label={show ? 'Hide password' : 'Show password'}
+          tabIndex={-1}
+          style={{
+            position: 'absolute',
+            right: '0.6rem',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+          }}
+        >
+          {show ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -230,6 +281,54 @@ function EditUserDialog({ user, onClose }: { user: TeamMember | null; onClose: (
   );
 }
 
+// ── Reset Password Dialog ───────────────────────────────────────────────────────
+
+function ResetPasswordDialog({ user, onClose }: { user: TeamMember | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [newPassword, setNewPassword] = useState('');
+
+  useEffect(() => {
+    if (user) setNewPassword('');
+  }, [user]);
+
+  const reset = useMutation({
+    mutationFn: () => api.patch(`/users/${user?.id}/reset-password`, { newPassword }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'team'] });
+      onClose();
+    },
+  });
+
+  if (!user) return null;
+
+  return (
+    <Dialog isOpen={!!user} onClose={onClose} title={`Reset Password — ${user.fullName}`} maxWidth={420}>
+      <form onSubmit={(e: FormEvent) => { e.preventDefault(); reset.mutate(); }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: 0 }}>
+          Sets a new temporary password for <strong>{user.email}</strong>. Share it with them directly —
+          they can change it themselves afterward from Profile Settings.
+        </p>
+        <PasswordField
+          id="reset-password"
+          label="New temporary password"
+          value={newPassword}
+          onChange={setNewPassword}
+          autoComplete="new-password"
+        />
+        {reset.isError && <p className="error-text">Could not reset the password. Try again.</p>}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+          <button type="submit" className="btn btn-primary" disabled={reset.isPending} style={{ flex: 1 }}>
+            {reset.isPending ? 'Resetting…' : 'Reset password'}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function UsersPage() {
@@ -237,6 +336,7 @@ export function UsersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<TeamMember | null>(null);
+  const [resettingUser, setResettingUser] = useState<TeamMember | null>(null);
 
   const usersQuery = useQuery({
     queryKey: ['users', 'team'],
@@ -331,10 +431,13 @@ export function UsersPage() {
             <label htmlFor="email">Email</label>
             <input id="email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
-          <div className="field">
-            <label htmlFor="password">Temporary password</label>
-            <input id="password" type="password" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-          </div>
+          <PasswordField
+            id="password"
+            label="Temporary password"
+            value={form.password}
+            onChange={(password) => setForm({ ...form, password })}
+            autoComplete="new-password"
+          />
           <div className="field">
             <label htmlFor="phone">Phone (optional)</label>
             <input id="phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -396,17 +499,19 @@ export function UsersPage() {
       </Dialog>
 
       <EditUserDialog user={editingUser} onClose={() => setEditingUser(null)} />
+      <ResetPasswordDialog user={resettingUser} onClose={() => setResettingUser(null)} />
 
-      <UsersTable data={usersQuery.data ?? []} isLoading={usersQuery.isLoading} isError={usersQuery.isError} onEdit={setEditingUser} onToggleActive={(u) => toggleActive.mutate({ id: u.id, isActive: u.isActive })} toggleIsPending={toggleActive.isPending} />
+      <UsersTable data={usersQuery.data ?? []} isLoading={usersQuery.isLoading} isError={usersQuery.isError} onEdit={setEditingUser} onResetPassword={setResettingUser} onToggleActive={(u) => toggleActive.mutate({ id: u.id, isActive: u.isActive })} toggleIsPending={toggleActive.isPending} />
     </div>
   );
 }
 
-function UsersTable({ data, isLoading, isError, onEdit, onToggleActive, toggleIsPending }: {
+function UsersTable({ data, isLoading, isError, onEdit, onResetPassword, onToggleActive, toggleIsPending }: {
   data: TeamMember[];
   isLoading: boolean;
   isError: boolean;
   onEdit: (u: TeamMember) => void;
+  onResetPassword: (u: TeamMember) => void;
   onToggleActive: (u: TeamMember) => void;
   toggleIsPending: boolean;
 }) {
@@ -468,6 +573,7 @@ function UsersTable({ data, isLoading, isError, onEdit, onToggleActive, toggleIs
                     <td style={{ textAlign: 'right' }}>
                       <span style={{ display: 'inline-flex', gap: '0.4rem' }}>
                         <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => onEdit(u)}>Edit</button>
+                        <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => onResetPassword(u)}>Reset Password</button>
                         <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={toggleIsPending} onClick={() => onToggleActive(u)}>
                           {u.isActive ? 'Deactivate' : 'Activate'}
                         </button>
