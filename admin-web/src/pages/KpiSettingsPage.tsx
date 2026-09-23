@@ -337,7 +337,7 @@ function InstallationRatesPanel() {
   };
 
   return (
-    <div className="card" style={{ marginTop: '1.5rem', maxWidth: 1040 }}>
+    <div className="card" style={{ marginTop: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Installation Rates</div>
