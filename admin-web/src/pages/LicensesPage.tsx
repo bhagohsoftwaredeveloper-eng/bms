@@ -375,14 +375,16 @@ function NenposClientsTab() {
         clientCode: generateClientCode(),
         ownerName: 'Admin staff',
         contactNo: '—',
-        email: '',
-        address: '',
         clientType: 'SOFTWARE',
       })).data,
     onSuccess: (newClient) => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setAddForm((f) => ({ ...f, clientName: newClient.businessName, clientId: newClient.clientCode }));
       setNameFocused(false);
+      setAddError('');
+    },
+    onError: (err: any) => {
+      setAddError(err?.response?.data?.message ?? 'Could not quick-add the client. Try again.');
     },
   });
 
