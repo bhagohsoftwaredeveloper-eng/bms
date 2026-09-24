@@ -297,6 +297,15 @@ function GroupHeaderRow({ colSpan, title, subtitle, count, computerCount, expand
   );
 }
 
+function generateClientCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'CLT-';
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 function NenposClientsTab() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -356,6 +365,24 @@ function NenposClientsTab() {
     },
     onError: (err: any) => {
       setAddError(err?.response?.data?.message ?? 'Could not add the client. Try again.');
+    },
+  });
+
+  const createClientMutation = useMutation({
+    mutationFn: async (businessName: string) =>
+      (await api.post<Client>('/clients', {
+        businessName,
+        clientCode: generateClientCode(),
+        ownerName: 'Admin staff',
+        contactNo: '—',
+        email: '',
+        address: '',
+        clientType: 'SOFTWARE',
+      })).data,
+    onSuccess: (newClient) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      setAddForm((f) => ({ ...f, clientName: newClient.businessName, clientId: newClient.clientCode }));
+      setNameFocused(false);
     },
   });
 
@@ -644,8 +671,26 @@ function NenposClientsTab() {
                       .slice(0, 8);
                     if (matches.length === 0) {
                       return (
-                        <div style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                          No matching client in the directory — a new NENPOS record will use this name.
+                        <div>
+                          <div style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                            No matching client in the directory — a new NENPOS record will use this name.
+                          </div>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => createClientMutation.mutate(addForm.clientName.trim())}
+                            disabled={createClientMutation.isPending}
+                            style={{
+                              display: 'block', width: '100%', padding: '0.6rem 0.85rem', border: 0,
+                              borderTop: '1px solid var(--border)', background: 'transparent',
+                              color: 'var(--accent)', fontWeight: 600, textAlign: 'left',
+                              cursor: createClientMutation.isPending ? 'default' : 'pointer', fontSize: '0.875rem',
+                            }}
+                          >
+                            {createClientMutation.isPending
+                              ? 'Adding…'
+                              : `⚡ Quick add "${addForm.clientName.trim()}" as new client`}
+                          </button>
                         </div>
                       );
                     }
