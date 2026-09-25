@@ -1,5 +1,6 @@
 import type { Client, DocumentType, JobOrderStatus, SoftwareProduct, WarrantyTier } from '../../lib/types';
 import { DOC_META } from './doc-types';
+import { type UnitDraft, groupItems, unitCloudTotal } from '../../lib/job-order-units';
 
 export interface LineItem {
   _key: string; // local only
@@ -9,6 +10,7 @@ export interface LineItem {
   quantity: number;
   unitPrice: number;
   warrantyTier: WarrantyTier;
+  unitKey?: string | null; // local computer key (UnitDraft._key); null/undefined = general item
 }
 
 // ─── Print template (only visible when printing) ─────────────────────────────
@@ -19,6 +21,8 @@ interface PrintTemplateProps {
   joNumber: string;
   client?: Client;
   product?: SoftwareProduct;
+  units?: UnitDraft[];
+  products?: SoftwareProduct[];
   salePrice: number;
   subtotal: number;
   discountAmt: number;
@@ -40,7 +44,7 @@ interface PrintTemplateProps {
 }
 
 export function PrintTemplate({
-  docType, jobId, joNumber, client, product,
+  docType, jobId, joNumber, client, product, units, products,
   salePrice, subtotal, discountAmt, materialsTotal, grandTotal,
   amountPaid, balanceDue,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
@@ -98,6 +102,73 @@ export function PrintTemplate({
         </div>
       </div>
 
+      {units && units.length > 0 ? (
+        groupItems(items, units).map((group) => {
+          const prod = group.unit ? products?.find((x) => x.id === group.unit!.productId) : undefined;
+          const groupTotal = group.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+          return (
+            <div key={group.key} style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
+              <strong>{group.unit ? `${group.unit.label || 'Computer'} — System / Software` : 'General Materials'}</strong>
+              {group.unit && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8pt', fontSize: '11pt' }}>
+                  <thead>
+                    <tr style={{ background: '#f0f0f0' }}>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Details</th>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ border: '1px solid #ccc', padding: '6pt' }}>{prod?.productName ?? '—'}</td>
+                      <td style={{ border: '1px solid #ccc', padding: '6pt' }}>v{prod?.version ?? '—'}</td>
+                      <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(group.unit.price)}</td>
+                    </tr>
+                    {group.unit.cloudEnabled && (
+                      <tr>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt' }}>Cloud subscription</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
+                          {p(group.unit.cloudMonthlyRate)} / month × {group.unit.cloudMonths} mo
+                        </td>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(unitCloudTotal(group.unit))}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+              {group.items.length > 0 && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8pt', fontSize: '11pt' }}>
+                  <thead>
+                    <tr style={{ background: '#f0f0f0' }}>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Description</th>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>Qty</th>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Unit Price</th>
+                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map((item, i) => (
+                      <tr key={i}>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt' }}>{item.name}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt', color: '#555' }}>{item.description || '—'}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>{item.quantity}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>{p(item.unitPrice)}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(item.quantity * item.unitPrice)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td colSpan={4} style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>Materials Total</td>
+                      <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(groupTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })
+      ) : (
+        <>
       {/* Software Main Item */}
       <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
         <strong>System / Software</strong>
@@ -154,6 +225,8 @@ export function PrintTemplate({
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
 
       {/* Totals */}

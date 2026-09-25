@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
+  IsNotEmpty,
+  MaxLength,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -39,6 +42,46 @@ export class JobOrderItemDto {
   @IsOptional()
   @IsEnum(WarrantyTier)
   warrantyTier?: WarrantyTier;
+
+  /** Which computer (JobOrderUnitDto.key in the same request) this line belongs to; omit for a general item. */
+  @IsOptional()
+  @IsString()
+  unitKey?: string;
+}
+
+export class JobOrderUnitDto {
+  /** Client-side id used only to link items to this computer within one request. */
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  key!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  label!: string;
+
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  price!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  cloudEnabled?: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cloudMonthlyRate?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cloudMonths?: number;
 }
 
 export class UpsertJobOrderDto {
@@ -112,6 +155,14 @@ export class UpsertJobOrderDto {
   @IsOptional()
   @IsBoolean()
   includesBackofficeExtension?: boolean;
+
+  /** SOFTWARE orders only: one entry per computer. When present the server recomputes salePrice and cloudTotal. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => JobOrderUnitDto)
+  units?: JobOrderUnitDto[];
 
   @IsArray()
   @ValidateNested({ each: true })

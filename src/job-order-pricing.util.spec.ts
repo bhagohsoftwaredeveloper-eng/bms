@@ -52,6 +52,15 @@ describe('computeGrandTotal', () => {
       ]),
     ).toBe(350);
   });
+
+  it('adds cloudTotal to the subtotal before the discount', () => {
+    expect(computeGrandTotal(10000, 0, 'FIXED', [], 1500)).toBe(11500);
+    expect(computeGrandTotal(10000, 10, 'PERCENTAGE', [{ quantity: 1, unitPrice: 1000 }], 1000)).toBe(10800);
+  });
+
+  it('treats a missing cloudTotal as zero', () => {
+    expect(computeGrandTotal(5000, 0, 'FIXED', [])).toBe(5000);
+  });
 });
 
 describe('computeBalance', () => {

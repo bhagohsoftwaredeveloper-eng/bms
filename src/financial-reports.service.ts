@@ -113,6 +113,7 @@ export class FinancialReportsService {
         Number(jo.discount),
         jo.discountType,
         jo.items.map((item) => ({ quantity: item.quantity, unitPrice: Number(item.unitPrice) })),
+        Number(jo.cloudTotal ?? 0),
       );
       const paymentsForBalance = jo.payments.map((p) => ({ amount: Number(p.amount), voidedAt: p.voidedAt }));
       const balance = computeBalance(grandTotal, paymentsForBalance);

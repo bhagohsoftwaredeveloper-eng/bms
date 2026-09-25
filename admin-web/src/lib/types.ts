@@ -195,6 +195,7 @@ export interface JobOrderItem {
   quantity: number;
   unitPrice: string;
   inventoryItemId: string | null;
+  unitId: string | null;
   warrantyTier: WarrantyTier;
   createdAt: string;
 }
@@ -203,12 +204,25 @@ export type JobOrderType = 'SOFTWARE' | 'CCTV' | 'SIGNAGE';
 
 export type DocumentType = 'JOB_ORDER' | 'QUOTATION' | 'INVOICE' | 'RECEIPT';
 
+export interface JobOrderUnit {
+  id: string;
+  jobOrderId: string;
+  label: string;
+  sortOrder: number;
+  productId: string | null;
+  price: string;
+  cloudEnabled: boolean;
+  cloudMonthlyRate: string | null;
+  cloudMonths: number | null;
+}
+
 export interface JobOrder {
   id: string;
   jobId: string | null;
   clientId: string;
   productId: string | null;
   salePrice: string;
+  cloudTotal: string;
   discount: string;
   discountType: DiscountType;
   remarks: string | null;
@@ -228,6 +242,7 @@ export interface JobOrder {
   client?: Client;
   product?: SoftwareProduct;
   items: JobOrderItem[];
+  units?: JobOrderUnit[];
 }
 
 export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'GCASH' | 'CHECK';

@@ -5,12 +5,14 @@ import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
 import { ConvertJobOrderDto, UpsertJobOrderDto } from './upsert-job-order.dto';
 import { ensureLaborEarning } from './job-order-labor.util';
+import { computeUnitTotals, validateUnits } from './job-order-units.util';
 
 const INCLUDE_FULL = {
   client: true,
   product: true,
   job: { include: { installer: true } },
   items: { orderBy: { createdAt: 'asc' as const } },
+  units: { orderBy: { sortOrder: 'asc' as const } },
 };
 
 // Split from INCLUDE_FULL because findAll() shares that shape for the job
@@ -38,15 +40,23 @@ export class JobOrdersService {
       throw new NotFoundException(`Job order ${dto.id} not found`);
     }
 
+    const type = dto.type ?? JobOrderType.SOFTWARE;
+    const units = type === JobOrderType.SOFTWARE ? (dto.units ?? []) : [];
+    if (units.length) {
+      validateUnits(units, dto.items.map((i) => i.unitKey));
+    }
+    const unitTotals = units.length ? computeUnitTotals(units) : null;
+
     const data = {
       clientId: dto.clientId,
-      productId: dto.productId ?? null,
-      salePrice: dto.salePrice,
+      productId: unitTotals ? (units[0].productId ?? null) : (dto.productId ?? null),
+      salePrice: unitTotals ? unitTotals.salePrice : dto.salePrice,
+      cloudTotal: unitTotals ? unitTotals.cloudTotal : 0,
       discount: dto.discount ?? 0,
       discountType: dto.discountType ?? 'FIXED',
       remarks: dto.remarks ?? null,
       status: dto.status ?? JobOrderStatus.DRAFT,
-      type: dto.type ?? JobOrderType.SOFTWARE,
+      type,
       cameraCount: dto.cameraCount ?? null,
       cameraRate: dto.cameraRate ?? null,
       laborPct: dto.laborPct ?? null,
@@ -56,14 +66,18 @@ export class JobOrdersService {
     };
     const newCompleted = data.status === JobOrderStatus.COMPLETED;
 
-    const itemsCreate = dto.items.map((item) => ({
+    const toItemRow = (item: (typeof dto.items)[number]) => ({
       name: item.name,
       description: item.description ?? null,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       inventoryItemId: item.inventoryItemId ?? null,
       warrantyTier: item.warrantyTier ?? 'ACCESSORY',
-    }));
+    });
+    // General items (and every item on a legacy/no-units order) are created
+    // nested with the order; computer-tagged items need the new unit ids first.
+    const itemsCreate = dto.items.filter((i) => !units.length || !i.unitKey).map(toItemRow);
+    const unitItems = units.length ? dto.items.filter((i) => i.unitKey) : [];
 
     return this.prisma.$transaction(async (tx) => {
       let oldItems: { inventoryItemId: string | null; quantity: number }[] = [];
@@ -78,6 +92,7 @@ export class JobOrdersService {
         oldCompleted = existing.status === JobOrderStatus.COMPLETED;
 
         await tx.jobOrderItem.deleteMany({ where: { jobOrderId: existing.id } });
+        await tx.jobOrderUnit.deleteMany({ where: { jobOrderId: existing.id } });
         jobOrder = await tx.jobOrder.update({
           where: { id: existing.id },
           data: { ...data, items: { createMany: { data: itemsCreate } } },
@@ -92,6 +107,35 @@ export class JobOrdersService {
           },
           include: INCLUDE_FULL,
         });
+      }
+
+      if (units.length) {
+        const keyToId = new Map<string, string>();
+        for (const [index, u] of units.entries()) {
+          const created = await tx.jobOrderUnit.create({
+            data: {
+              jobOrderId: jobOrder.id,
+              label: u.label,
+              sortOrder: index,
+              productId: u.productId ?? null,
+              price: u.price,
+              cloudEnabled: u.cloudEnabled ?? false,
+              cloudMonthlyRate: u.cloudEnabled ? (u.cloudMonthlyRate ?? 0) : null,
+              cloudMonths: u.cloudEnabled ? (u.cloudMonths ?? 1) : null,
+            },
+          });
+          keyToId.set(u.key, created.id);
+        }
+        if (unitItems.length) {
+          await tx.jobOrderItem.createMany({
+            data: unitItems.map((i) => ({
+              jobOrderId: jobOrder.id,
+              ...toItemRow(i),
+              unitId: keyToId.get(i.unitKey!)!,
+            })),
+          });
+        }
+        jobOrder = await tx.jobOrder.findUniqueOrThrow({ where: { id: jobOrder.id }, include: INCLUDE_FULL });
       }
 
       // Reconcile inventory stock for the completed-state change.

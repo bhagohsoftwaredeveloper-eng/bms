@@ -9,9 +9,15 @@ function buildTx() {
     jobOrderItem: {
       findMany: jest.fn().mockResolvedValue([]),
       deleteMany: jest.fn().mockResolvedValue({}),
+      createMany: jest.fn().mockResolvedValue({}),
+    },
+    jobOrderUnit: {
+      deleteMany: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: `unit-${data.sortOrder}`, ...data })),
     },
     jobOrder: {
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn().mockImplementation(({ where }) => Promise.resolve({ id: where.id, job: null, items: [], units: [] })),
       update: jest.fn().mockImplementation(({ where, data }) =>
         Promise.resolve({ id: where.id, jobId: null, job: null, items: [], ...stripNested(data) }),
       ),
@@ -310,5 +316,105 @@ describe('JobOrdersService include shapes', () => {
     expect(include.agreementVersion).toEqual({
       include: { sections: { orderBy: { sortOrder: 'asc' } } },
     });
+  });
+});
+
+describe('JobOrdersService.upsert with computers', () => {
+  const units = [
+    { key: 'k1', label: 'Front', productId: 'p1', price: 49000, cloudEnabled: true, cloudMonthlyRate: 500, cloudMonths: 2 },
+    { key: 'k2', label: 'Back', productId: 'p2', price: 30000 },
+  ];
+
+  it('recomputes salePrice/cloudTotal from units and ignores the client salePrice', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert({ ...baseDto, salePrice: 1, units }, user);
+
+    const data = tx.jobOrder.create.mock.calls[0][0].data;
+    expect(data.salePrice).toBe(79000);
+    expect(data.cloudTotal).toBe(1000);
+    expect(data.productId).toBe('p1');
+  });
+
+  it('creates units in order and links tagged items to the new unit ids', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert(
+      {
+        ...baseDto,
+        units,
+        items: [
+          { name: 'Printer', quantity: 1, unitPrice: 100, unitKey: 'k2' },
+          { name: 'Router', quantity: 1, unitPrice: 50 },
+        ],
+      },
+      user,
+    );
+
+    expect(tx.jobOrderUnit.create).toHaveBeenCalledTimes(2);
+    const general = tx.jobOrder.create.mock.calls[0][0].data.items.createMany.data;
+    expect(general.map((i: { name: string }) => i.name)).toEqual(['Router']);
+    expect(tx.jobOrderItem.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ name: 'Printer', unitId: 'unit-1' })],
+    });
+  });
+
+  it('deletes old units when re-saving an existing order', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1', status: 'DRAFT' });
+
+    await service.upsert({ ...baseDto, id: 'jo-1', units }, user);
+
+    expect(tx.jobOrderUnit.deleteMany).toHaveBeenCalledWith({ where: { jobOrderId: 'jo-1' } });
+  });
+
+  it('rejects an item whose unitKey matches no unit', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await expect(
+      service.upsert({ ...baseDto, units, items: [{ name: 'X', quantity: 1, unitPrice: 1, unitKey: 'nope' }] }, user),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('keeps the legacy path when no units are sent', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert({ ...baseDto, salePrice: 10000 }, user);
+
+    const data = tx.jobOrder.create.mock.calls[0][0].data;
+    expect(data.salePrice).toBe(10000);
+    expect(data.cloudTotal).toBe(0);
+    expect(tx.jobOrderUnit.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores units on CCTV orders', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert({ ...baseDto, type: 'CCTV', units }, user);
+
+    expect(tx.jobOrderUnit.create).not.toHaveBeenCalled();
+    expect(tx.jobOrder.create.mock.calls[0][0].data.salePrice).toBe(10000);
+  });
+
+  it('keeps a unit-tagged item as a general item when units are ignored (CCTV order)', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert(
+      { ...baseDto, type: 'CCTV', units, items: [{ name: 'Cable', quantity: 1, unitPrice: 10, unitKey: 'k1' }] },
+      user,
+    );
+
+    const general = tx.jobOrder.create.mock.calls[0][0].data.items.createMany.data;
+    expect(general).toHaveLength(1);
+    expect(general[0].name).toBe('Cable');
+    expect(general[0].unitId).toBeUndefined();
+    expect(tx.jobOrderItem.createMany).not.toHaveBeenCalled();
   });
 });

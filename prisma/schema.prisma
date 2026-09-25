@@ -270,6 +270,7 @@ model SoftwareProduct {
 
   licenses  License[]
   jobOrders JobOrder[]
+  jobOrderUnits JobOrderUnit[]
 
   @@map("software_products")
 }
@@ -476,6 +477,8 @@ model JobOrder {
   cameraRate   Decimal?       @map("camera_rate") @db.Decimal(12, 2)
   laborPct     Decimal?       @map("labor_pct") @db.Decimal(5, 2)
   docType      DocType        @default(JOB_ORDER) @map("doc_type")
+  /** Sum of every computer's monthly cloud rate × months; server-computed, added to the grand total. */
+  cloudTotal   Decimal        @default(0) @map("cloud_total") @db.Decimal(12, 2)
 
   /** SOFTWARE orders only: whether this install includes setting up the POS backoffice extension. */
   includesBackofficeExtension Boolean @default(false) @map("includes_backoffice_extension")
@@ -491,7 +494,8 @@ model JobOrder {
   client           Client            @relation(fields: [clientId], references: [id])
   product          SoftwareProduct?  @relation(fields: [productId], references: [id])
   items            JobOrderItem[]
-  payments         Payment[]
+  units            JobOrderUnit[]
+  payments        Payment[]
   agreementVersion AgreementVersion? @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
 
   @@index([agreementVersionId])
@@ -508,13 +512,40 @@ model JobOrderItem {
 
   inventoryItemId String?      @map("inventory_item_id")
   warrantyTier    WarrantyTier @default(ACCESSORY) @map("warranty_tier")
+  /** null = general item for the whole order (not tied to one computer). */
+  unitId          String?      @map("unit_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
   jobOrder      JobOrder       @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
   inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  unit          JobOrderUnit?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
+  @@index([unitId])
   @@map("job_order_items")
+}
+
+/** One computer/terminal on a SOFTWARE job order, with its own product and optional cloud subscription. */
+model JobOrderUnit {
+  id               String   @id @default(uuid())
+  jobOrderId       String   @map("job_order_id")
+  label            String
+  sortOrder        Int      @default(0) @map("sort_order")
+  productId        String?  @map("product_id")
+  price            Decimal  @default(0) @db.Decimal(12, 2)
+  cloudEnabled     Boolean  @default(false) @map("cloud_enabled")
+  cloudMonthlyRate Decimal? @map("cloud_monthly_rate") @db.Decimal(12, 2)
+  cloudMonths      Int?     @map("cloud_months")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  jobOrder JobOrder         @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+  product  SoftwareProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  items    JobOrderItem[]
+
+  @@index([jobOrderId])
+  @@index([productId])
+  @@map("job_order_units")
 }
 
 /**
