@@ -121,7 +121,7 @@ subscription, discount, grand total.
 
 Header lists each computer with its product/version. Items grouped per computer with
 subtotals. A cloud subscription line per computer ("Cloud subscription ₱X × N mo").
-Totals block gains the cloud line. Agreement pages and payments are unchanged.
+Each computer block shows its own cloud subscription row; the totals block is unchanged (the grand total already includes cloud). Agreement pages and payments are unchanged.
 
 ## Out of scope
 
