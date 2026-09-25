@@ -462,6 +462,7 @@ export function JobOrderPage() {
     setDiscountType(jo.discountType);
     setRemarks(jo.remarks ?? '');
     setItems((jo.items ?? []).map(fromSaved));
+    setActiveUnitKey('');
     setJoType(jo.type ?? 'SOFTWARE');
     setCameraCount(jo.cameraCount ?? 0);
     setCameraRate(jo.cameraRate != null ? Number(jo.cameraRate) : 0);
@@ -543,7 +544,7 @@ export function JobOrderPage() {
             unitPrice,
             inventoryItemId: inventoryItemId ?? undefined,
             warrantyTier,
-            unitKey: isSoftware ? (unitKey ?? undefined) : undefined,
+            unitKey: isSoftware && unitKey && units.some((u) => u._key === unitKey) ? unitKey : undefined,
           })),
         })
       ).data,

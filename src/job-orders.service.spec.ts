@@ -401,4 +401,20 @@ describe('JobOrdersService.upsert with computers', () => {
     expect(tx.jobOrderUnit.create).not.toHaveBeenCalled();
     expect(tx.jobOrder.create.mock.calls[0][0].data.salePrice).toBe(10000);
   });
+
+  it('keeps a unit-tagged item as a general item when units are ignored (CCTV order)', async () => {
+    const tx = buildTx();
+    const { service } = buildService(tx);
+
+    await service.upsert(
+      { ...baseDto, type: 'CCTV', units, items: [{ name: 'Cable', quantity: 1, unitPrice: 10, unitKey: 'k1' }] },
+      user,
+    );
+
+    const general = tx.jobOrder.create.mock.calls[0][0].data.items.createMany.data;
+    expect(general).toHaveLength(1);
+    expect(general[0].name).toBe('Cable');
+    expect(general[0].unitId).toBeUndefined();
+    expect(tx.jobOrderItem.createMany).not.toHaveBeenCalled();
+  });
 });

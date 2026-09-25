@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { computeTotals } from '../lib/job-order-units';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -222,12 +223,13 @@ export function JobOrdersPage() {
             </thead>
             <tbody>
               {pg.paginated.map((jo) => {
-                const materialsTotal = (jo.items || []).reduce((s, i) => s + i.quantity * Number(i.unitPrice), 0);
-                const subtotal = Number(jo.salePrice) + materialsTotal;
-                const discountAmt = jo.discountType === 'PERCENTAGE'
-                  ? (subtotal * Number(jo.discount)) / 100
-                  : Number(jo.discount);
-                const grandTotal = Math.max(0, subtotal - discountAmt);
+                const { grandTotal } = computeTotals(
+                  Number(jo.salePrice),
+                  Number(jo.discount),
+                  jo.discountType,
+                  (jo.items ?? []).map((i) => ({ quantity: i.quantity, unitPrice: Number(i.unitPrice) })),
+                  Number(jo.cloudTotal ?? 0),
+                );
 
                 return (
                   <tr key={jo.id}>

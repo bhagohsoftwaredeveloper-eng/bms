@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
+  IsNotEmpty,
+  MaxLength,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -49,16 +52,20 @@ export class JobOrderItemDto {
 export class JobOrderUnitDto {
   /** Client-side id used only to link items to this computer within one request. */
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
   key!: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
   label!: string;
 
   @IsOptional()
   @IsString()
   productId?: string;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   price!: number;
 
@@ -67,7 +74,7 @@ export class JobOrderUnitDto {
   cloudEnabled?: boolean;
 
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   cloudMonthlyRate?: number;
 
@@ -152,6 +159,7 @@ export class UpsertJobOrderDto {
   /** SOFTWARE orders only: one entry per computer. When present the server recomputes salePrice and cloudTotal. */
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => JobOrderUnitDto)
   units?: JobOrderUnitDto[];

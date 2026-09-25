@@ -1,7 +1,7 @@
 export type DiscountTypeLike = 'FIXED' | 'PERCENTAGE';
 
 /**
- * Mirrors admin-web's computeTotals() in JobOrderPage.tsx exactly, so a
+ * Mirrors admin-web's `computeTotals()` in admin-web/src/lib/job-order-units.ts exactly, so a
  * client's payment balance always matches the total on their printed invoice.
  */
 export function computeGrandTotal(
