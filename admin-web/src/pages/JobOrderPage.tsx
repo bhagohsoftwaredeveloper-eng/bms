@@ -38,6 +38,10 @@ import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, Disco
 import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
 import type { DocumentType as DocType } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
+import {
+  GENERAL_KEY, applyProduct, blankUnit, computeTotals, detachItems,
+  fromSavedUnits, legacyUnit, sumUnits, unitCloudTotal, unitsForCount, type UnitDraft,
+} from '../lib/job-order-units';
 import { ServiceAgreement } from '../components/print/ServiceAgreement';
 
 // Quick-add materials now come from the Inventory (Settings → Inventory Management).
@@ -249,17 +253,8 @@ function fromSaved(item: JobOrderItem): LineItem {
     quantity: item.quantity,
     unitPrice: Number(item.unitPrice),
     warrantyTier: item.warrantyTier ?? 'ACCESSORY',
+    unitKey: item.unitId ?? undefined,
   };
-}
-
-// ─── Computed totals ──────────────────────────────────────────────────────────
-
-function computeTotals(salePrice: number, discount: number, discountType: DiscountType, items: LineItem[]) {
-  const materialsTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const subtotal = salePrice + materialsTotal;
-  const discountAmt = discountType === 'PERCENTAGE' ? (subtotal * discount) / 100 : discount;
-  const grandTotal = Math.max(0, subtotal - discountAmt);
-  return { materialsTotal, subtotal, discountAmt, grandTotal };
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -362,7 +357,8 @@ export function JobOrderPage() {
 
   // ── Form state ──
   const [clientId, setClientId] = useState('');
-  const [productId, setProductId] = useState('');
+  const [units, setUnits] = useState<UnitDraft[]>(() => [blankUnit(0)]);
+  const [activeUnitKey, setActiveUnitKey] = useState('');
   const [salePrice, setSalePrice] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState<DiscountType>('FIXED');
@@ -377,6 +373,13 @@ export function JobOrderPage() {
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [includeAgreement, setIncludeAgreement] = useState(false);
   const [includesBackofficeExtension, setIncludesBackofficeExtension] = useState(false);
+
+  const isSoftware = joType === 'SOFTWARE';
+  const unitSums = sumUnits(units);
+  // Where newly added items/packages land: the chosen computer, or General.
+  const addTarget = !isSoftware || activeUnitKey === GENERAL_KEY
+    ? undefined
+    : (units.find((u) => u._key === activeUnitKey)?._key ?? units[0]?._key);
 
   // ── Package insert: pick a bundle, review/trim the breakdown, then expand ──
   const [showPackageDialog, setShowPackageDialog] = useState(false);
@@ -424,6 +427,7 @@ export function JobOrderPage() {
         quantity: c.quantity * Math.max(1, qty),
         unitPrice: Number(c.inventoryItem?.unitPrice ?? 0),
         warrantyTier: 'ACCESSORY',
+        unitKey: addTarget,
       }));
     setItems((prev) => [...prev, ...newItems]);
   };
@@ -448,8 +452,12 @@ export function JobOrderPage() {
     const jo = jobOrderQuery.data;
     if (!jo) return;
     setClientId(jo.clientId);
-    setProductId(jo.productId || '');
     setSalePrice(Number(jo.salePrice));
+    setUnits(
+      jo.units && jo.units.length > 0
+        ? fromSavedUnits(jo.units)
+        : [legacyUnit(jo.productId ?? '', Number(jo.salePrice))],
+    );
     setDiscount(Number(jo.discount));
     setDiscountType(jo.discountType);
     setRemarks(jo.remarks ?? '');
@@ -471,17 +479,24 @@ export function JobOrderPage() {
     if (jobOrderQuery.data) return;
 
     if (job.clientId) setClientId(job.clientId);
-    if (job.license?.productId) setProductId(job.license.productId);
-  }, [jobQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, jobOrderQuery.isFetching]);
-
-  // ── Auto-fill sale price when product changes ──
-  useEffect(() => {
-    if (!productId) return;
-    const product = productsQuery.data?.find((p) => p.id === productId);
-    if (product && !jobOrderQuery.data) {
-      setSalePrice(Number(product.price));
+    const licensedProduct = productsQuery.data?.find((p) => p.id === job.license?.productId);
+    if (licensedProduct) {
+      setUnits((prev) => (prev[0] && !prev[0].productId ? [applyProduct(prev[0], licensedProduct), ...prev.slice(1)] : prev));
     }
-  }, [productId, productsQuery.data, jobOrderQuery.data]);
+  }, [jobQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, jobOrderQuery.isFetching, productsQuery.data]);
+
+  // New order: once a client is picked, open one card per computer they declared.
+  const prefilledFor = useRef('');
+  useEffect(() => {
+    if (jobOrderQuery.data || jobOrderQuery.isPending || joType !== 'SOFTWARE') return;
+    if (!clientId || prefilledFor.current === clientId) return;
+    const c = clientsQuery.data?.find((x) => x.id === clientId);
+    if (!c) return;
+    prefilledFor.current = clientId;
+    if (c.computerCount && c.computerCount > 0) {
+      setUnits((prev) => (prev.every((u) => !u.productId) ? unitsForCount(c.computerCount!) : prev));
+    }
+  }, [clientId, clientsQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, joType]);
 
   // ── Upsert mutation ──
   const upsert = useMutation({
@@ -491,8 +506,19 @@ export function JobOrderPage() {
           id: standalone ? (jobOrderQuery.data?.id ?? standaloneId) : undefined,
           jobId: standalone ? undefined : jobId,
           clientId,
-          productId: joType === 'SOFTWARE' ? productId : undefined,
-          salePrice,
+          productId: isSoftware ? units[0]?.productId || undefined : undefined,
+          salePrice: effectiveSalePrice,
+          units: isSoftware
+            ? units.map((u) => ({
+                key: u._key,
+                label: u.label,
+                productId: u.productId || undefined,
+                price: u.price,
+                cloudEnabled: u.cloudEnabled,
+                cloudMonthlyRate: u.cloudEnabled ? u.cloudMonthlyRate : undefined,
+                cloudMonths: u.cloudEnabled ? u.cloudMonths : undefined,
+              }))
+            : undefined,
           discount,
           discountType,
           remarks: remarks || undefined,
@@ -504,13 +530,14 @@ export function JobOrderPage() {
           docType: doc ?? docType,
           includeAgreement,
           includesBackofficeExtension: joType === 'SOFTWARE' ? includesBackofficeExtension : undefined,
-          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId, warrantyTier }) => ({
+          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId, warrantyTier, unitKey }) => ({
             name,
             description: description || undefined,
             quantity,
             unitPrice,
             inventoryItemId: inventoryItemId ?? undefined,
             warrantyTier,
+            unitKey: isSoftware ? (unitKey ?? undefined) : undefined,
           })),
         })
       ).data,
@@ -595,6 +622,7 @@ export function JobOrderPage() {
         quantity: 1,
         unitPrice: Number(item.unitPrice),
         warrantyTier: 'ACCESSORY',
+        unitKey: addTarget,
       },
     ]);
   };
@@ -615,7 +643,7 @@ export function JobOrderPage() {
 
   const addCustom = (e: FormEvent) => {
     e.preventDefault();
-    setItems((prev) => [...prev, { _key: newKey(), ...customForm }]);
+    setItems((prev) => [...prev, { _key: newKey(), ...customForm, unitKey: addTarget }]);
     setCustomForm({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' });
     setShowCustomForm(false);
   };
@@ -628,14 +656,17 @@ export function JobOrderPage() {
     setItems((prev) => prev.filter((i) => i._key !== key));
   };
 
-  const { materialsTotal, subtotal, discountAmt, grandTotal } = computeTotals(salePrice, discount, discountType, items);
+  const effectiveSalePrice = isSoftware ? unitSums.systemsTotal : salePrice;
+  const cloudTotal = isSoftware ? unitSums.cloudTotal : 0;
+  const { materialsTotal, subtotal, discountAmt, grandTotal } = computeTotals(
+    effectiveSalePrice, discount, discountType, items, cloudTotal,
+  );
 
-  const product = productsQuery.data?.find((p) => p.id === productId);
   const client = clientsQuery.data?.find((c) => c.id === clientId);
   const jo = jobOrderQuery.data;
   const parent = jobQuery.data;
 
-  const canSave = !!clientId && (joType === 'SOFTWARE' ? !!productId : true);
+  const canSave = !!clientId && (isSoftware ? units.length > 0 && units.every((u) => !!u.productId) : true);
 
   // A category with no jobOrderType, and an item with no category at all, both
   // mean "usable on any job" — so they show regardless of the order's type.
@@ -795,8 +826,7 @@ export function JobOrderPage() {
           jobId={jobId ?? jo?.id ?? ''}
           joNumber={jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}
           client={client}
-          product={product}
-          salePrice={salePrice}
+          salePrice={effectiveSalePrice}
           subtotal={subtotal}
           discountAmt={discountAmt}
           materialsTotal={materialsTotal}
@@ -995,17 +1025,6 @@ export function JobOrderPage() {
                     isAdding={createClient.isPending}
                   />
                 </div>
-                {joType === 'SOFTWARE' && (
-                  <div className="field">
-                    <label htmlFor="jo-product">System / Software</label>
-                    <select id="jo-product" required value={productId} onChange={(e) => setProductId(e.target.value)}>
-                      <option value="">Select product…</option>
-                      {productsQuery.data?.map((p) => (
-                        <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 {joType === 'CCTV' && (
                   <>
                     <div className="field">
@@ -1027,25 +1046,141 @@ export function JobOrderPage() {
                       onChange={(e) => setLaborPct(Number(e.target.value) || 0)} />
                   </div>
                 )}
-                <div className="field">
-                  <label htmlFor="jo-sale-price">
-                    {joType === 'SIGNAGE' ? 'Total Signage Price (₱)' : joType === 'CCTV' ? 'Contract Price (₱)' : 'Sale Price (₱)'}
-                  </label>
-                  <input
-                    id="jo-sale-price"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={salePrice}
-                    onChange={(e) => setSalePrice(Number(e.target.value))}
-                  />
-                  {product && (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      List price: ₱{Number(product.price).toLocaleString()}
-                    </span>
-                  )}
-                </div>
+                {!isSoftware && (
+                  <div className="field">
+                    <label htmlFor="jo-sale-price">
+                      {joType === 'SIGNAGE' ? 'Total Signage Price (₱)' : 'Contract Price (₱)'}
+                    </label>
+                    <input
+                      id="jo-sale-price"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={salePrice}
+                      onChange={(e) => setSalePrice(Number(e.target.value))}
+                    />
+                  </div>
+                )}
               </div>
+              {isSoftware && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  {client?.computerCount != null && client.computerCount !== units.length && (
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Client declares {client.computerCount} computer{client.computerCount === 1 ? '' : 's'}; this order has {units.length}.
+                    </p>
+                  )}
+                  {units.map((unit, index) => {
+                    const unitProduct = productsQuery.data?.find((p) => p.id === unit.productId);
+                    const patch = (p: Partial<UnitDraft>) =>
+                      setUnits((prev) => prev.map((u) => (u._key === unit._key ? { ...u, ...p } : u)));
+                    return (
+                      <div key={unit._key} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem', background: 'var(--surface-secondary)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
+                          <div className="field">
+                            <label htmlFor={`unit-label-${unit._key}`}>Computer</label>
+                            <input id={`unit-label-${unit._key}`} value={unit.label} onChange={(e) => patch({ label: e.target.value })} />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`unit-product-${unit._key}`}>System / Software</label>
+                            <select
+                              id={`unit-product-${unit._key}`}
+                              required
+                              value={unit.productId}
+                              onChange={(e) =>
+                                setUnits((prev) =>
+                                  prev.map((u) =>
+                                    u._key === unit._key
+                                      ? applyProduct(u, productsQuery.data?.find((p) => p.id === e.target.value))
+                                      : u,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="">Select product…</option>
+                              {productsQuery.data?.map((p) => (
+                                <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`unit-price-${unit._key}`}>Sale Price (₱)</label>
+                            <input
+                              id={`unit-price-${unit._key}`}
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={unit.price}
+                              onChange={(e) => patch({ price: Number(e.target.value) || 0 })}
+                            />
+                            {unitProduct && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                List price: ₱{Number(unitProduct.price).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="field">
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={unit.cloudEnabled}
+                                onChange={(e) => patch({ cloudEnabled: e.target.checked })}
+                              />
+                              Cloud subscription (monthly)
+                            </label>
+                            {unit.cloudEnabled && (
+                              <>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: '0.5rem', marginTop: '0.35rem' }}>
+                                  <input
+                                    aria-label="Monthly rate"
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    value={unit.cloudMonthlyRate}
+                                    onChange={(e) => patch({ cloudMonthlyRate: Number(e.target.value) || 0 })}
+                                  />
+                                  <input
+                                    aria-label="Months"
+                                    type="number"
+                                    min={1}
+                                    value={unit.cloudMonths}
+                                    onChange={(e) => patch({ cloudMonths: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
+                                  />
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  ₱{unit.cloudMonthlyRate.toLocaleString()}/mo × {unit.cloudMonths} = ₱{unitCloudTotal(unit).toLocaleString()}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {units.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.75rem', color: 'var(--danger)' }}
+                            onClick={() => {
+                              setUnits((prev) => prev.filter((u) => u._key !== unit._key));
+                              setItems((prev) => detachItems(prev, unit._key));
+                            }}
+                          >
+                            Remove {unit.label || `computer ${index + 1}`}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.85rem' }}
+                      onClick={() => setUnits((prev) => [...prev, blankUnit(prev.length)])}
+                    >
+                      + Add computer
+                    </button>
+                  </div>
+                </div>
+              )}
               {joType === 'SOFTWARE' && (
                 <label
                   style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', marginBottom: '0.75rem' }}
@@ -1081,6 +1216,22 @@ export function JobOrderPage() {
             {effectiveStep === 2 && (
             <section className="card">
               <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Materials / Package</h2>
+
+              {isSoftware && (
+                <div className="field" style={{ marginBottom: '1rem' }}>
+                  <label htmlFor="jo-active-unit">Adding to</label>
+                  <select
+                    id="jo-active-unit"
+                    value={addTarget ?? GENERAL_KEY}
+                    onChange={(e) => setActiveUnitKey(e.target.value)}
+                  >
+                    {units.map((u, i) => (
+                      <option key={u._key} value={u._key}>{u.label || `Computer ${i + 1}`}</option>
+                    ))}
+                    <option value={GENERAL_KEY}>General (not tied to a computer)</option>
+                  </select>
+                </div>
+              )}
 
               {/* Item search (filters + doubles as barcode scan) */}
               <div style={{ marginBottom: '1rem' }}>
@@ -1379,7 +1530,7 @@ export function JobOrderPage() {
                     <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
                       {joType === 'SOFTWARE' ? 'System / Software' : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
                     </td>
-                    <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{salePrice.toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{effectiveSalePrice.toLocaleString()}</td>
                   </tr>
                   {items.length > 0 && (
                     <tr>

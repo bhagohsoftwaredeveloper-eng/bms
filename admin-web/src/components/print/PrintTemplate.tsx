@@ -9,6 +9,7 @@ export interface LineItem {
   quantity: number;
   unitPrice: number;
   warrantyTier: WarrantyTier;
+  unitKey?: string | null; // local computer key (UnitDraft._key); null/undefined = general item
 }
 
 // ─── Print template (only visible when printing) ─────────────────────────────
