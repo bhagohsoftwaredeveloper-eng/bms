@@ -1132,13 +1132,23 @@ export function JobOrderPage() {
                             )}
                           </div>
                           <div className="field">
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                            <label htmlFor={`unit-cloud-${unit._key}`}>Cloud Subscription (Monthly)</label>
+                            {/* Inline overrides: `.field label`/`.field input` would otherwise uppercase the text and stretch the checkbox to full width. */}
+                            <label
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: '2.6rem',
+                                fontSize: '0.9rem', fontWeight: 400, textTransform: 'none', letterSpacing: 0,
+                                color: 'var(--text)', cursor: 'pointer',
+                              }}
+                            >
                               <input
+                                id={`unit-cloud-${unit._key}`}
                                 type="checkbox"
+                                style={{ width: '1.1rem', height: '1.1rem', padding: 0, flexShrink: 0, accentColor: 'var(--accent)' }}
                                 checked={unit.cloudEnabled}
                                 onChange={(e) => patch({ cloudEnabled: e.target.checked })}
                               />
-                              Cloud subscription (monthly)
+                              Include cloud subscription
                             </label>
                             {unit.cloudEnabled && (
                               <>
