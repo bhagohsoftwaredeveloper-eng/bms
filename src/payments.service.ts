@@ -39,6 +39,7 @@ export class PaymentsService {
       Number(jobOrder.discount),
       jobOrder.discountType,
       jobOrder.items.map((item) => ({ quantity: item.quantity, unitPrice: Number(item.unitPrice) })),
+      Number(jobOrder.cloudTotal ?? 0),
     );
     const balance = computeBalance(
       grandTotal,

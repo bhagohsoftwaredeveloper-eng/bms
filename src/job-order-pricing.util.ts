@@ -9,9 +9,10 @@ export function computeGrandTotal(
   discount: number,
   discountType: DiscountTypeLike,
   items: { quantity: number; unitPrice: number }[],
+  cloudTotal = 0,
 ): number {
   const materialsTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const subtotal = salePrice + materialsTotal;
+  const subtotal = salePrice + materialsTotal + cloudTotal;
   const discountAmt = discountType === 'PERCENTAGE' ? (subtotal * discount) / 100 : discount;
   return Math.max(0, subtotal - discountAmt);
 }
