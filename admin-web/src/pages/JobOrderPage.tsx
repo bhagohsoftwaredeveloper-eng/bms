@@ -39,7 +39,7 @@ import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
 import type { DocumentType as DocType } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
 import {
-  GENERAL_KEY, applyProduct, blankUnit, computeTotals, detachItems,
+  GENERAL_KEY, MAX_PREFILL_COMPUTERS, applyProduct, blankUnit, computeTotals, detachItems,
   fromSavedUnits, legacyUnit, sumUnits, unitCloudTotal, unitsForCount, type UnitDraft,
 } from '../lib/job-order-units';
 import { ServiceAgreement } from '../components/print/ServiceAgreement';
@@ -488,15 +488,21 @@ export function JobOrderPage() {
   // New order: once a client is picked, open one card per computer they declared.
   const prefilledFor = useRef('');
   useEffect(() => {
-    if (jobOrderQuery.data || jobOrderQuery.isPending || joType !== 'SOFTWARE') return;
+    if (jobOrderQuery.data || jobOrderQuery.isLoading || joType !== 'SOFTWARE') return;
     if (!clientId || prefilledFor.current === clientId) return;
     const c = clientsQuery.data?.find((x) => x.id === clientId);
     if (!c) return;
     prefilledFor.current = clientId;
     if (c.computerCount && c.computerCount > 0) {
-      setUnits((prev) => (prev.every((u) => !u.productId) ? unitsForCount(c.computerCount!) : prev));
+      setUnits((prev) => {
+        const n = Math.min(c.computerCount!, MAX_PREFILL_COMPUTERS);
+        if (prev.length >= n) return prev;
+        if (prev.every((u) => !u.productId)) return unitsForCount(n);
+        // keep the computer(s) the user/licence already filled, append blanks up to the declared count
+        return [...prev, ...Array.from({ length: n - prev.length }, (_, i) => blankUnit(prev.length + i))];
+      });
     }
-  }, [clientId, clientsQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, joType]);
+  }, [clientId, clientsQuery.data, jobOrderQuery.data, jobOrderQuery.isLoading, joType]);
 
   // ── Upsert mutation ──
   const upsert = useMutation({
