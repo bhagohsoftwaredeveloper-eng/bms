@@ -40,7 +40,7 @@ import type { DocumentType as DocType } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
 import {
   GENERAL_KEY, MAX_PREFILL_COMPUTERS, applyProduct, blankUnit, computeTotals, detachItems,
-  fromSavedUnits, legacyUnit, sumUnits, unitCloudTotal, unitsForCount, type UnitDraft,
+  fromSavedUnits, groupItems, legacyUnit, sumUnits, unitCloudTotal, unitsForCount, type UnitDraft,
 } from '../lib/job-order-units';
 import { ServiceAgreement } from '../components/print/ServiceAgreement';
 
@@ -699,6 +699,10 @@ export function JobOrderPage() {
   const agreementSections =
     jo?.agreementVersion?.sections ?? agreementTemplateQuery.data?.sections ?? [];
 
+  const itemGroups = isSoftware
+    ? groupItems(items, units)
+    : [{ key: 'all', unit: null as UnitDraft | null, items }];
+
   // Payments require a saved order; fall back to step 2 if the order vanishes.
   const effectiveStep = step === 3 && !jo?.id ? 2 : step;
 
@@ -833,6 +837,8 @@ export function JobOrderPage() {
           joNumber={jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}
           client={client}
           salePrice={effectiveSalePrice}
+          units={isSoftware ? units : undefined}
+          products={productsQuery.data}
           subtotal={subtotal}
           discountAmt={discountAmt}
           materialsTotal={materialsTotal}
@@ -1325,8 +1331,18 @@ export function JobOrderPage() {
               </div>
 
               {/* Items table */}
-              {items.length > 0 && (
-                <table style={{ marginBottom: '0.75rem' }}>
+              {itemGroups.map((group) =>
+                group.items.length > 0 ? (
+                  <div key={group.key} style={{ marginBottom: '0.75rem' }}>
+                    {isSoftware && (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0.25rem 0' }}>
+                        {group.unit ? group.unit.label || 'Computer' : 'General'}
+                        <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
+                          {' '}— ₱{group.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                <table>
                   <thead>
                     <tr>
                       <th style={{ width: 44 }}>#</th>
@@ -1340,7 +1356,7 @@ export function JobOrderPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, index) => (
+                    {group.items.map((item, index) => (
                       <tr key={item._key}>
                         <td style={{ color: 'var(--text-muted)', textAlign: 'center' }}>{index + 1}</td>
                         <td>
@@ -1406,6 +1422,8 @@ export function JobOrderPage() {
                     ))}
                   </tbody>
                 </table>
+                  </div>
+                ) : null,
               )}
 
               {!showCustomForm && (
@@ -1534,7 +1552,9 @@ export function JobOrderPage() {
                 <tbody>
                   <tr>
                     <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
-                      {joType === 'SOFTWARE' ? 'System / Software' : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
+                      {joType === 'SOFTWARE'
+                        ? `System / Software (${units.length} computer${units.length === 1 ? '' : 's'})`
+                        : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
                     </td>
                     <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{effectiveSalePrice.toLocaleString()}</td>
                   </tr>
@@ -1542,6 +1562,12 @@ export function JobOrderPage() {
                     <tr>
                       <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Materials ({items.length} item{items.length > 1 ? 's' : ''})</td>
                       <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{materialsTotal.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  {cloudTotal > 0 && (
+                    <tr>
+                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Cloud subscription</td>
+                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{cloudTotal.toLocaleString()}</td>
                     </tr>
                   )}
                   <tr>
