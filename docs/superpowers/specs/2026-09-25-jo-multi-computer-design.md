@@ -97,9 +97,12 @@ In the existing transaction: delete old items and units, create units, map
 ## Admin web: wizard (JobOrderPage.tsx)
 
 **Step 1** (SOFTWARE): the single "System / Software" select becomes a list of
-**Computer cards**: label, product select, price (auto-filled from product, editable),
-"Cloud subscription" toggle revealing monthly rate (prefilled from
-`maintenanceFee`) and months (default 1), and a remove button (min 1 computer).
+**Computer cards**. Each card keeps the current two-column layout: top row = label
+(left) and product select (right); second row = Sale price with its "List price" hint
+(left, auto-filled from the product, editable) and the **Cloud subscription** block
+(right, the slot that is empty today beside Sale Price). The cloud block is a toggle
+that reveals monthly rate (prefilled from `maintenanceFee`) and months (default 1),
+with the line total shown beneath. Each card has a remove button (min 1 computer).
 "+ Add computer" appends a card. The `salePrice` input becomes a read-only
 "Systems subtotal"; a "Cloud subscription" subtotal is shown beside it.
 
