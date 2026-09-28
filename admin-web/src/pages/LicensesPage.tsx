@@ -341,6 +341,29 @@ function NenposClientsTab() {
   const [addForm, setAddForm] = useState(EMPTY_NENPOS_FORM);
   const [addError, setAddError] = useState('');
   const [nameFocused, setNameFocused] = useState(false);
+  const isSuperAdmin = useAuthStore((s) => s.user?.role) === 'SUPER_ADMIN';
+  const [showVoided, setShowVoided] = useState(false);
+  const [voidingRecord, setVoidingRecord] = useState<NenposClient | null>(null);
+  const [voidForm, setVoidForm] = useState(EMPTY_SECURE_FORM);
+  const [voidError, setVoidError] = useState('');
+
+  const closeVoid = () => { setVoidingRecord(null); setVoidForm(EMPTY_SECURE_FORM); setVoidError(''); };
+
+  const voidMutation = useMutation({
+    mutationFn: async () => (await api.post(`/nenpos-clients/${voidingRecord!.id}/void`, {
+      password: voidForm.password,
+      confirmName: voidForm.confirmName.trim(),
+      reason: voidForm.reason.trim() || undefined,
+    })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nenpos-clients'] });
+      closeVoid();
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message;
+      setVoidError(Array.isArray(message) ? message[0] : message ?? 'Void failed — nothing was changed.');
+    },
+  });
 
   const clientsQuery = useQuery({
     queryKey: ['clients'],
@@ -448,8 +471,8 @@ function NenposClientsTab() {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const listQuery = useQuery({
-    queryKey: ['nenpos-clients'],
-    queryFn: async () => (await api.get<NenposClient[]>('/nenpos-clients')).data,
+    queryKey: ['nenpos-clients', { includeVoided: showVoided }],
+    queryFn: async () => (await api.get<NenposClient[]>('/nenpos-clients', { params: showVoided ? { includeVoided: true } : undefined })).data,
   });
 
   const uploadMutation = useMutation({
@@ -540,6 +563,15 @@ function NenposClientsTab() {
             disabled={uploadMutation.isPending}
           />
         </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={showVoided}
+            onChange={(e) => setShowVoided(e.target.checked)}
+            style={{ width: 'auto', margin: 0, padding: 0 }}
+          />
+          Show voided/transferred
+        </label>
       </div>
 
       {uploadResult && (
@@ -620,8 +652,19 @@ function NenposClientsTab() {
                           )}
                         />,
                         ...(isExpanded(group.key) ? group.rows.map((row) => (
-                        <tr key={row.id}>
-                          <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingLeft: '1.6rem' }}>{row.clientId || '—'}</td>
+                        <tr key={row.id} style={{ opacity: row.voidedAt ? 0.55 : 1 }}>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingLeft: '1.6rem' }}>
+                            {row.clientId || '—'}
+                            {row.voidedAt && (
+                              <span className="badge" style={{
+                                marginLeft: '0.5rem', fontSize: '0.7rem', padding: '0.15rem 0.5rem',
+                                background: 'rgba(220,38,38,0.12)', color: 'var(--danger)',
+                                border: '1px solid var(--danger)', borderRadius: 999,
+                              }}>
+                                {row.transferredToLicenseId ? 'Transferred' : 'Voided'}
+                              </span>
+                            )}
+                          </td>
                           <td>
                             <span className={`badge badge-${(row.status ?? 'active').toLowerCase()}`}>
                               {row.status ?? '—'}
@@ -645,8 +688,15 @@ function NenposClientsTab() {
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <RowActionsMenu
                               actions={[
-                                { label: 'Edit', onClick: () => openEdit(row) },
+                                ...(!row.voidedAt ? [{ label: 'Edit', onClick: () => openEdit(row) }] : []),
                                 { label: 'View', onClick: () => setViewRecord(row) },
+                                ...(isSuperAdmin && !row.voidedAt
+                                  ? [{
+                                      label: 'Void',
+                                      danger: true,
+                                      onClick: () => { setVoidForm(EMPTY_SECURE_FORM); setVoidError(''); setVoidingRecord(row); },
+                                    }]
+                                  : []),
                               ]}
                             />
                           </td>
@@ -674,6 +724,52 @@ function NenposClientsTab() {
           </div>
         )}
       </div>
+
+      {/* Void dialog — SUPER_ADMIN only */}
+      <Dialog isOpen={!!voidingRecord} onClose={closeVoid} title="Void NENPOS record" maxWidth={520}>
+        {voidingRecord && (
+          <form onSubmit={(e) => { e.preventDefault(); voidMutation.mutate(); }}>
+            <div style={{ padding: '0.75rem', background: 'var(--bg)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
+              <div style={{ color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Voiding record for:</div>
+              <div style={{ fontWeight: 600 }}>{voidingRecord.clientName}</div>
+              <div style={{ fontFamily: 'monospace', marginTop: '0.3rem', color: 'var(--accent)', fontSize: '0.8rem' }}>
+                {voidingRecord.clientId} · {voidingRecord.license ?? 'No license'}
+              </div>
+            </div>
+            <p style={{ marginTop: 0, marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              The record is removed from the list. It is kept as a voided record and can only be restored directly in the database.
+            </p>
+            <div className="field">
+              <label htmlFor="void-reason">Reason (optional)</label>
+              <textarea id="void-reason" rows={2} value={voidForm.reason}
+                onChange={(e) => setVoidForm({ ...voidForm, reason: e.target.value })} />
+            </div>
+            <div className="field">
+              <label htmlFor="void-password">Your password *</label>
+              <input id="void-password" type="password" required autoComplete="current-password" value={voidForm.password}
+                onChange={(e) => setVoidForm({ ...voidForm, password: e.target.value })} />
+            </div>
+            <div className="field">
+              <label htmlFor="void-confirm">Type <strong>{voidingRecord.clientName}</strong> to authorize *</label>
+              <input id="void-confirm" type="text" required autoComplete="off" value={voidForm.confirmName}
+                onChange={(e) => setVoidForm({ ...voidForm, confirmName: e.target.value })}
+                placeholder={voidingRecord.clientName} />
+            </div>
+            {voidError && <p className="error-text">{voidError}</p>}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={voidMutation.isPending || !voidForm.password || voidForm.confirmName.trim().toLowerCase() !== voidingRecord.clientName.trim().toLowerCase()}
+                style={{ flex: 1, background: 'var(--danger)', borderColor: 'var(--danger)' }}
+              >
+                {voidMutation.isPending ? 'Voiding…' : 'Void record'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={closeVoid}>Cancel</button>
+            </div>
+          </form>
+        )}
+      </Dialog>
 
       {/* Add / edit client dialog */}
       <Dialog isOpen={showAddForm} onClose={closeForm} title={editingId ? 'Edit NENPOS Client' : 'Add NENPOS Client'} maxWidth={560}>
@@ -958,6 +1054,9 @@ export function LicensesPage() {
   const [transferForm, setTransferForm] = useState(EMPTY_SECURE_FORM);
   const [transferError, setTransferError] = useState('');
   const [transferSuccess, setTransferSuccess] = useState<{ clientName: string } | null>(null);
+  const [deletingLicense, setDeletingLicense] = useState<License | null>(null);
+  const [deleteForm, setDeleteForm] = useState(EMPTY_SECURE_FORM);
+  const [deleteError, setDeleteError] = useState('');
 
   const generateLicense = useMutation({
     mutationFn: async () => {
@@ -1000,6 +1099,27 @@ export function LicensesPage() {
     onError: (err: any) => {
       const message = err?.response?.data?.message;
       setTransferError(Array.isArray(message) ? message[0] : message ?? 'Transfer failed — nothing was changed.');
+    },
+  });
+
+  const closeDelete = () => { setDeletingLicense(null); setDeleteForm(EMPTY_SECURE_FORM); setDeleteError(''); };
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const license = deletingLicense!;
+      return (await api.post(`/licenses/${license.id}/void`, {
+        password: deleteForm.password,
+        confirmName: deleteForm.confirmName.trim(),
+        reason: deleteForm.reason.trim() || undefined,
+      })).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['licenses'] });
+      closeDelete();
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message;
+      setDeleteError(Array.isArray(message) ? message[0] : message ?? 'Void failed — nothing was changed.');
     },
   });
 
@@ -1437,6 +1557,66 @@ export function LicensesPage() {
             )}
           </Dialog>
 
+          {/* Void dialog — SUPER_ADMIN only */}
+          <Dialog isOpen={!!deletingLicense} onClose={closeDelete} title="Void license" maxWidth={520}>
+            {deletingLicense && (
+              <form onSubmit={(e) => { e.preventDefault(); deleteMutation.mutate(); }}>
+                <div style={{ padding: '0.75rem', background: 'var(--bg)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Voiding license for:</div>
+                  <div style={{ fontWeight: 600 }}>{deletingLicense.client?.businessName} — {deletingLicense.product?.productName}</div>
+                  <div style={{ fontFamily: 'monospace', marginTop: '0.3rem', color: 'var(--accent)', fontSize: '0.8rem' }}>{deletingLicense.licenseKey}</div>
+                </div>
+                <p style={{ marginTop: 0, marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  The license is removed from the list. It is kept as a voided record (visible with “Show voided”) and can only be restored directly in the database.
+                </p>
+                <div className="field">
+                  <label htmlFor="delete-reason">Reason (optional)</label>
+                  <textarea
+                    id="delete-reason"
+                    rows={2}
+                    value={deleteForm.reason}
+                    onChange={(e) => setDeleteForm({ ...deleteForm, reason: e.target.value })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="delete-password">Your password *</label>
+                  <input
+                    id="delete-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={deleteForm.password}
+                    onChange={(e) => setDeleteForm({ ...deleteForm, password: e.target.value })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="delete-confirm">Type <strong>{deletingLicense.client?.businessName}</strong> to authorize *</label>
+                  <input
+                    id="delete-confirm"
+                    type="text"
+                    required
+                    autoComplete="off"
+                    value={deleteForm.confirmName}
+                    onChange={(e) => setDeleteForm({ ...deleteForm, confirmName: e.target.value })}
+                    placeholder={deletingLicense.client?.businessName}
+                  />
+                </div>
+                {deleteError && <p className="error-text">{deleteError}</p>}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={deleteMutation.isPending || !deleteForm.password || deleteForm.confirmName.trim().toLowerCase() !== (deletingLicense.client?.businessName ?? '').trim().toLowerCase()}
+                    style={{ flex: 1, background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                  >
+                    {deleteMutation.isPending ? 'Voiding…' : 'Void license'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={closeDelete}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </Dialog>
+
           {/* Action bar */}
           {!isDeveloper && (
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
@@ -1580,6 +1760,17 @@ export function LicensesPage() {
                                             danger: true,
                                             disabled: suspendLicense.isPending,
                                             onClick: () => suspendLicense.mutate(license.id),
+                                          }]
+                                        : []),
+                                      ...(!isDeveloper && !license.voidedAt
+                                        ? [{
+                                            label: 'Void',
+                                            danger: true,
+                                            onClick: () => {
+                                              setDeleteForm(EMPTY_SECURE_FORM);
+                                              setDeleteError('');
+                                              setDeletingLicense(license);
+                                            },
                                           }]
                                         : []),
                                     ]}
