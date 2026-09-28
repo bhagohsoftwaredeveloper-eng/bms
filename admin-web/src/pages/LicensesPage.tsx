@@ -158,14 +158,18 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 function SearchFilter({
   search, onSearch,
   statusOptions, status, onStatus,
+  licenseOptions, license = '', onLicense,
   placeholder = 'Search…',
 }: {
   search: string; onSearch: (v: string) => void;
   statusOptions?: string[]; status: string; onStatus: (v: string) => void;
+  licenseOptions?: Array<{ value: string; label: string }>; license?: string; onLicense?: (v: string) => void;
   placeholder?: string;
 }) {
+  const selectStyle = { padding: '0.55rem 0.85rem', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', color: 'var(--text)', fontSize: '0.9rem' };
+  const labelStyle = { display: 'flex', flexDirection: 'column' as const, gap: '0.25rem', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--text-muted)' };
   return (
-    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <input
         type="search"
         value={search}
@@ -174,14 +178,22 @@ function SearchFilter({
         style={{ flex: 1, minWidth: 220, padding: '0.55rem 0.85rem', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', color: 'var(--text)', fontSize: '0.9rem' }}
       />
       {statusOptions && statusOptions.length > 0 && (
-        <select
-          value={status}
-          onChange={(e) => onStatus(e.target.value)}
-          style={{ padding: '0.55rem 0.85rem', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', color: 'var(--text)', fontSize: '0.9rem' }}
-        >
-          <option value="">All statuses</option>
-          {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <label style={labelStyle}>
+          Status
+          <select value={status} onChange={(e) => onStatus(e.target.value)} style={selectStyle}>
+            <option value="">All statuses</option>
+            {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+      )}
+      {licenseOptions && onLicense && (
+        <label style={labelStyle}>
+          License
+          <select value={license} onChange={(e) => onLicense(e.target.value)} style={selectStyle}>
+            <option value="">All licenses</option>
+            {licenseOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
       )}
     </div>
   );
@@ -232,6 +244,15 @@ function downloadTemplate() {
 }
 
 const TRIAL_DAYS = 30;
+
+/** Non-key values that appear in the NENPOS license column; anything else is a real license key. */
+const SPECIAL_LICENSES = ['TRIAL', 'CANCELLED'];
+const NENPOS_LICENSE_FILTERS = [
+  { value: 'KEY', label: 'Has license key' },
+  { value: 'TRIAL', label: 'TRIAL' },
+  { value: 'CANCELLED', label: 'CANCELLED' },
+  { value: 'NONE', label: 'No license' },
+];
 
 /** Shared form state for the secure void / transfer dialogs (password + typed confirmation phrase). */
 const EMPTY_SECURE_FORM = { password: '', confirmName: '', reason: '' };
@@ -314,6 +335,7 @@ function NenposClientsTab() {
   const [viewRecord, setViewRecord] = useState<NenposClient | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [licenseFilter, setLicenseFilter] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addForm, setAddForm] = useState(EMPTY_NENPOS_FORM);
@@ -459,7 +481,12 @@ function NenposClientsTab() {
     const matchSearch = !q || [r.clientId, r.clientName, r.license, r.installer, r.address, r.notes]
       .some((v) => v?.toLowerCase().includes(q));
     const matchStatus = !statusFilter || r.status?.toUpperCase() === statusFilter.toUpperCase();
-    return matchSearch && matchStatus;
+    const lic = r.license?.trim().toUpperCase() ?? '';
+    const matchLicense = !licenseFilter
+      || (licenseFilter === 'NONE' ? !lic
+        : licenseFilter === 'KEY' ? !!lic && !SPECIAL_LICENSES.includes(lic)
+          : lic === licenseFilter);
+    return matchSearch && matchStatus && matchLicense;
   });
 
   const groupedRecords = filtered.reduce<Array<{ key: string; clientName: string; clientId: string; rows: NenposClient[] }>>((groups, row) => {
@@ -475,11 +502,11 @@ function NenposClientsTab() {
   }, []);
 
   const { paginated, page, pageSize, totalPages, total, start, changePage, changePageSize, reset } = usePagination(groupedRecords);
-  const { isExpanded, toggle } = useExpandedGroups(!!search || !!statusFilter);
+  const { isExpanded, toggle } = useExpandedGroups(!!search || !!statusFilter || !!licenseFilter);
 
   useEffect(() => {
     reset();
-  }, [search, statusFilter]);
+  }, [search, statusFilter, licenseFilter]);
 
   return (
     <div>
@@ -531,6 +558,7 @@ function NenposClientsTab() {
         <SearchFilter
           search={search} onSearch={setSearch}
           statusOptions={statusOptions} status={statusFilter} onStatus={setStatusFilter}
+          licenseOptions={NENPOS_LICENSE_FILTERS} license={licenseFilter} onLicense={setLicenseFilter}
           placeholder="Search by name, client ID, license, installer, address…"
         />
       )}
