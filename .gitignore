@@ -20,3 +20,8 @@ downloads/*
 
 # Claude Code worktrees/scratch state — not project source
 .claude/
+
+# Local build/test artifacts
+/.e2e-dist
+/desktop
+/generated
