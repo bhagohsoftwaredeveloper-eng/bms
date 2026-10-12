@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { JobStatus, LicenseStatus, Prisma, UserRole } from '@prisma/client';
+import { JobStatus, Prisma, UserRole } from '@prisma/client';
 import { EarningsService } from './earnings.service';
 import { PrismaService } from './prisma.service';
 import { NotificationsService } from './notifications.service';
@@ -192,25 +192,6 @@ export class JobsService {
       throw new ForbiddenException('You are not assigned to this job');
     }
     // Operators can update any job status for now (usually those they are working on)
-
-    // A job cannot be completed until its license has been activated. Jobs are
-    // not always linked to a specific license, so accept either the directly
-    // linked license OR any activated license belonging to the job's client.
-    if (dto.jobStatus === JobStatus.COMPLETED) {
-      let hasActivatedLicense = job.license?.status === LicenseStatus.ACTIVATED;
-      if (!hasActivatedLicense) {
-        const activatedCount = await this.prisma.license.count({
-          where: { clientId: job.clientId, status: LicenseStatus.ACTIVATED },
-        });
-        hasActivatedLicense = activatedCount > 0;
-      }
-      if (!hasActivatedLicense) {
-        throw new BadRequestException(
-          'Cannot complete this job: the license has not been activated yet. ' +
-            'Please wait for the license to be activated before completing the task.',
-        );
-      }
-    }
 
     return this.prisma.job.update({
       where: { id },
