@@ -26,6 +26,8 @@
     "node_modules",
     "dist",
     "admin-web",
-    "mobile"
+    "mobile",
+    "desktop",
+    ".e2e-dist"
   ]
 }
