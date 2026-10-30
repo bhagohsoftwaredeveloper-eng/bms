@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { Fragment, type FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
@@ -217,7 +217,45 @@ function EarningsTable({ earnings, totalsByUser, isAdmin, isLoading, isError, ha
     && (!status || earning.status === status)
     && inDateRange(earning.createdAt, from, to),
   );
-  const pg = usePagination(filtered);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const forceOpen = !!search || !!status || !!from || !!to;
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
+  const groups = filtered.reduce<Array<{ userId: string; name: string; role: string; rows: Earning[] }>>((acc, e) => {
+    const g = acc.find((x) => x.userId === e.userId);
+    if (g) g.rows.push(e);
+    else acc.push({ userId: e.userId, name: e.user?.fullName ?? 'Unknown', role: e.user?.role ?? '', rows: [e] });
+    return acc;
+  }, []).sort((a, b) => a.name.localeCompare(b.name));
+  type Group = (typeof groups)[number];
+  const pg = usePagination<Group | Earning>(isAdmin ? groups : filtered);
+  const peso = (n: number) => `₱${n.toLocaleString()}`;
+
+  const actionCell = (earning: Earning) => (
+    <td style={{ textAlign: 'right' }}>
+      <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+        {earning.status === 'PENDING' && (
+          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onSetStatus(earning.id, 'approve')}>Approve</button>
+        )}
+        {earning.status === 'APPROVED' && (
+          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onSetStatus(earning.id, 'paid')}>Mark paid</button>
+        )}
+      </div>
+    </td>
+  );
+
+  const typeCell = (earning: Earning) => (
+    <td>
+      {earning.type}
+      {earning.note && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{earning.note}</div>}
+    </td>
+  );
+
   return (
     <div className="card">
         {isLoading && <p>Loading earnings…</p>}
@@ -245,65 +283,77 @@ function EarningsTable({ earnings, totalsByUser, isAdmin, isLoading, isError, ha
           <table>
             <thead>
               <tr>
-                {isAdmin && <th>Team</th>}
+                <th>Recorded</th>
                 <th>Client</th>
                 <th>Type</th>
                 <th>Amount</th>
-                <th>Total Incentives</th>
                 <th>Status</th>
-                <th>Recorded</th>
                 {isAdmin && <th></th>}
               </tr>
             </thead>
             <tbody>
-              {pg.paginated.map((earning) => (
-                <tr key={earning.id}>
-                  {isAdmin && (
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{earning.user?.fullName}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{earning.user?.role}</div>
-                    </td>
-                  )}
-                  <td>
-                    {earning.job?.client?.businessName || (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A</span>
-                    )}
-                  </td>
-                  <td>
-                    {earning.type}
-                    {earning.note && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{earning.note}</div>
-                    )}
-                  </td>
-                  <td>₱{Number(earning.amount).toLocaleString()}</td>
-                  <td style={{ fontWeight: 600, color: 'var(--success)' }}>
-                    ₱{(totalsByUser.get(earning.userId)?.total ?? 0).toLocaleString()}
-                    {(totalsByUser.get(earning.userId)?.pending ?? 0) > 0 && (
-                      <div style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--warning)' }}>
-                        ₱{totalsByUser.get(earning.userId)!.pending.toLocaleString()} pending
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <StatusBadge status={earning.status} />
-                  </td>
-                  <td>{new Date(earning.createdAt).toLocaleDateString()}</td>
-                  {isAdmin && (
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                        {earning.status === 'PENDING' && (
-                          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onSetStatus(earning.id, 'approve')}>Approve</button>
+              {isAdmin
+                ? (pg.paginated as typeof groups).map((g) => {
+                    const open = forceOpen || expanded.has(g.userId);
+                    const t = totalsByUser.get(g.userId) ?? { total: 0, pending: 0 };
+                    return (
+                      <Fragment key={g.userId}>
+                        <tr style={{ background: 'var(--bg)' }}>
+                          <td colSpan={6}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                onClick={() => toggle(g.userId)}
+                                aria-expanded={open}
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'left', fontWeight: 700, color: 'var(--accent)' }}
+                              >
+                                <span style={{ display: 'inline-block', width: '1.1rem' }}>{open ? '▾' : '▸'}</span>
+                                {g.name}
+                                <span style={{ marginLeft: '0.5rem', fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-muted)' }}>{g.role}</span>
+                                <span style={{ marginLeft: '0.5rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+                                  {g.rows.length} earning{g.rows.length === 1 ? '' : 's'}
+                                </span>
+                              </button>
+                              <span style={{ fontSize: '0.85rem' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Total Incentives </span>
+                                <strong style={{ color: 'var(--success)' }}>{peso(t.total)}</strong>
+                                {t.pending > 0 && <span style={{ marginLeft: '0.5rem', color: 'var(--warning)' }}>{peso(t.pending)} pending</span>}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {open && g.rows.map((earning) => (
+                          <tr key={earning.id}>
+                            <td style={{ paddingLeft: '1.6rem', whiteSpace: 'nowrap' }}>{new Date(earning.createdAt).toLocaleDateString()}</td>
+                            <td>
+                              {earning.job?.client?.businessName || (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A</span>
+                              )}
+                            </td>
+                            {typeCell(earning)}
+                            <td>{peso(Number(earning.amount))}</td>
+                            <td><StatusBadge status={earning.status} /></td>
+                            {actionCell(earning)}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })
+                : (pg.paginated as Earning[]).map((earning) => (
+                    <tr key={earning.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(earning.createdAt).toLocaleDateString()}</td>
+                      <td>
+                        {earning.job?.client?.businessName || (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A</span>
                         )}
-                        {earning.status === 'APPROVED' && (
-                          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => onSetStatus(earning.id, 'paid')}>Mark paid</button>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
+                      </td>
+                      {typeCell(earning)}
+                      <td>{peso(Number(earning.amount))}</td>
+                      <td><StatusBadge status={earning.status} /></td>
+                    </tr>
+                  ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={isAdmin ? 8 : 6} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
+                <tr><td colSpan={isAdmin ? 6 : 5} style={{ padding: '1rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>No matches.</td></tr>
               )}
             </tbody>
           </table>
