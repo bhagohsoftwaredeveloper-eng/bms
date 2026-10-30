@@ -477,6 +477,8 @@ model JobOrder {
   cameraCount  Int?           @map("camera_count")
   cameraRate   Decimal?       @map("camera_rate") @db.Decimal(12, 2)
   laborPct     Decimal?       @map("labor_pct") @db.Decimal(5, 2)
+  /** CCTV / Signage: fixed installer labor pay, entered by admin. Replaces the price-derived labor. */
+  laborAmount  Decimal?       @map("labor_amount") @db.Decimal(12, 2)
   docType      DocType        @default(JOB_ORDER) @map("doc_type")
   /** Sum of every computer's monthly cloud rate × months; server-computed, added to the grand total. */
   cloudTotal   Decimal        @default(0) @map("cloud_total") @db.Decimal(12, 2)

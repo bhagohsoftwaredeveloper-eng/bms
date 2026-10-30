@@ -16,8 +16,6 @@ const EMPTY_FORM = {
   productName: '',
   version: '',
   licenseType: LICENSE_TYPES[0],
-  price: '',
-  maintenanceFee: '',
 };
 
 export function InventoryManagementPage() {
@@ -132,8 +130,6 @@ function SoftwareTab() {
         productName: form.productName,
         version: form.version,
         licenseType: form.licenseType,
-        price: Number(form.price),
-        maintenanceFee: form.maintenanceFee ? Number(form.maintenanceFee) : undefined,
       };
       if (editing) {
         return (await api.patch<SoftwareProduct>(`/software-products/${editing.id}`, payload)).data;
@@ -174,8 +170,6 @@ function SoftwareTab() {
       productName: product.productName,
       version: product.version,
       licenseType: product.licenseType,
-      price: String(product.price),
-      maintenanceFee: product.maintenanceFee ? String(product.maintenanceFee) : '',
     });
     setFormError('');
     setShowForm(true);
@@ -234,29 +228,6 @@ function SoftwareTab() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="field">
-            <label htmlFor="price">Price (₱)</label>
-            <input
-              id="price"
-              type="number"
-              min={0}
-              step="0.01"
-              required
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="maintenanceFee">Maintenance fee (₱, optional)</label>
-            <input
-              id="maintenanceFee"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.maintenanceFee}
-              onChange={(e) => setForm({ ...form, maintenanceFee: e.target.value })}
-            />
           </div>
           {formError && <p className="error-text">{formError}</p>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
@@ -320,8 +291,6 @@ function ProductsTable({
                   <th>Name</th>
                   <th>Version</th>
                   <th>License type</th>
-                  <th>Price</th>
-                  <th>Maintenance fee</th>
                   <th style={{ width: 160 }}></th>
                 </tr>
               </thead>
@@ -331,8 +300,6 @@ function ProductsTable({
                     <td style={{ fontWeight: 500 }}>{product.productName}</td>
                     <td>{product.version}</td>
                     <td>{product.licenseType.replace(/_/g, ' ')}</td>
-                    <td>₱{Number(product.price).toLocaleString()}</td>
-                    <td>{product.maintenanceFee ? `₱${Number(product.maintenanceFee).toLocaleString()}` : '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                         <button

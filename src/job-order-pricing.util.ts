@@ -1,42 +1,11 @@
-export type DiscountTypeLike = 'FIXED' | 'PERCENTAGE';
-
 /**
- * Mirrors admin-web's `computeTotals()` in admin-web/src/lib/job-order-units.ts exactly, so a
- * client's payment balance always matches the total on their printed invoice.
- */
-export function computeGrandTotal(
-  salePrice: number,
-  discount: number,
-  discountType: DiscountTypeLike,
-  items: { quantity: number; unitPrice: number }[],
-  cloudTotal = 0,
-): number {
-  const materialsTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const subtotal = salePrice + materialsTotal + cloudTotal;
-  const discountAmt = discountType === 'PERCENTAGE' ? (subtotal * discount) / 100 : discount;
-  return Math.max(0, subtotal - discountAmt);
-}
-
-export function computeBalance(
-  grandTotal: number,
-  payments: { amount: number; voidedAt: Date | null }[],
-): number {
-  const totalPaid = payments.filter((p) => !p.voidedAt).reduce((sum, p) => sum + p.amount, 0);
-  return grandTotal - totalPaid;
-}
-
-/**
- * Installer labor incentive per project type. Internal cost only — never part
- * of the client invoice / grand total.
+ * Installer labor incentive for CCTV / Signage jobs: the fixed amount the admin enters on the
+ * job order. Internal cost only. Software orders earn nothing here.
  */
 export function computeLaborIncentive(
   type: 'SOFTWARE' | 'CCTV' | 'SIGNAGE',
-  salePrice: number,
-  cameraCount: number | null | undefined,
-  cameraRate: number | null | undefined,
-  laborPct: number | null | undefined,
+  laborAmount: number | null | undefined,
 ): number {
-  if (type === 'CCTV') return (cameraCount ?? 0) * (cameraRate ?? 0);
-  if (type === 'SIGNAGE') return (salePrice * (laborPct ?? 20)) / 100;
-  return 0;
+  if (type === 'SOFTWARE') return 0;
+  return Math.max(0, laborAmount ?? 0);
 }

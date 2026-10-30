@@ -9,7 +9,7 @@ import { Calendar } from '../components/Calendar';
 import { Dialog } from '../components/Dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { Stagger, MotionItem, AnimatedNumber } from '../lib/motion';
-import type { AuthenticatedUser, Client, DevProject, Earning, FinancialSummary, Job, JobOrder, KpiDashboard, License, UserRole, Withdrawal } from '../lib/types';
+import type { AuthenticatedUser, Client, DevProject, Earning, Job, JobOrder, KpiDashboard, License, UserRole, Withdrawal } from '../lib/types';
 
 function useList<T>(key: string, url: string) {
   return useQuery({
@@ -59,10 +59,6 @@ function SuperAdminDashboard() {
   const licenses = useList<License>('dashboard-licenses', '/licenses');
   const jobs = useList<Job>('dashboard-jobs', '/jobs');
   const withdrawals = useList<Withdrawal>('dashboard-withdrawals', '/withdrawals');
-  const financial = useQuery({
-    queryKey: ['dashboard-financial'],
-    queryFn: async () => (await api.get<FinancialSummary>('/kpis/financial-summary')).data,
-  });
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -85,18 +81,6 @@ function SuperAdminDashboard() {
     <>
       <CardGrid
         cards={[
-          {
-            label: 'Total Revenue',
-            value: `₱${financial.data?.totalRevenue.toLocaleString() ?? '…'}`,
-            subtext: 'All-time finalized sales',
-            color: 'var(--success)',
-          },
-          {
-            label: 'Monthly Growth',
-            value: `${(financial.data?.growth ?? 0) >= 0 ? '+' : ''}${financial.data?.growth.toFixed(1) ?? '…'}%`,
-            subtext: 'From previous month',
-            color: (financial.data?.growth ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)',
-          },
           { label: 'Active Clients', value: activeClients, total: clients.data?.length ?? 0 },
           { label: 'Activated Licenses', value: activatedLicenses, total: licenses.data?.length ?? 0 },
           { label: 'Open Installation Jobs', value: pendingJobs, total: jobs.data?.length ?? 0 },
@@ -591,7 +575,6 @@ function SalesStaffDashboard() {
   const totalClients   = clients.data?.length ?? 0;
 
   const pipelineJOs    = allJOs.filter((j) => j.status === 'FINALIZED' || j.status === 'ON_GOING' || j.status === 'COMPLETED');
-  const pipelineValue  = pipelineJOs.reduce((sum, j) => sum + Number(j.salePrice), 0);
 
   const pendingEarningsAmt  = earnings.data?.filter((e) => e.status === 'PENDING').reduce((s, e) => s + Number(e.amount), 0) ?? 0;
   const approvedEarningsAmt = earnings.data?.filter((e) => e.status === 'APPROVED').reduce((s, e) => s + Number(e.amount), 0) ?? 0;
@@ -635,9 +618,9 @@ function SalesStaffDashboard() {
             subtext: `${softwareJOs.data?.length ?? 0} Software`,
           },
           {
-            label: 'Sales Pipeline',
-            value: `₱${pipelineValue.toLocaleString()}`,
-            subtext: `${pipelineJOs.length} finalized / active JOs`,
+            label: 'Active Job Orders',
+            value: pipelineJOs.length,
+            subtext: 'Finalized, on-going or completed',
             color: 'var(--accent)',
           },
           {
@@ -708,7 +691,6 @@ function SalesStaffDashboard() {
               <thead>
                 <tr>
                   <th>Client</th>
-                  <th>Sale Price</th>
                   <th>Status</th>
                   <th>Date</th>
                 </tr>
@@ -721,7 +703,6 @@ function SalesStaffDashboard() {
                     onClick={() => navigate(jo.jobId ? `/job-orders/${jo.jobId}` : `/job-orders/order/${jo.id}`)}
                   >
                     <td style={{ fontWeight: 600 }}>{jo.client?.businessName ?? '—'}</td>
-                    <td style={{ fontWeight: 600 }}>₱{Number(jo.salePrice).toLocaleString()}</td>
                     <td>
                       <StatusBadge status={jo.status} />
                     </td>
@@ -788,14 +769,6 @@ function QuickActions() {
           onClick={() => { setClientForm({ ...EMPTY_CLIENT_FORM, clientCode: generateClientCode() }); setShowClient(true); }}
         >
           + New Client
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ fontSize: '0.875rem' }}
-          onClick={() => navigate('/job-orders/order/new?doc=QUOTATION')}
-        >
-          + New Quotation
         </button>
         <button
           type="button"

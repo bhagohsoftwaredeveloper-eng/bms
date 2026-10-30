@@ -11,11 +11,10 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType, DocType, JobOrderStatus, JobOrderType, WarrantyTier } from '@prisma/client';
+import { DocType, JobOrderStatus, JobOrderType, WarrantyTier } from '@prisma/client';
 
 export class JobOrderItemDto {
   @IsString()
@@ -28,10 +27,6 @@ export class JobOrderItemDto {
   @IsInt()
   @Min(1)
   quantity!: number;
-
-  @IsNumber()
-  @Min(0)
-  unitPrice!: number;
 
   /** Links this line to an inventory item so stock deducts when the order completes. */
   @IsOptional()
@@ -65,18 +60,9 @@ export class JobOrderUnitDto {
   @IsString()
   productId?: string;
 
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  price!: number;
-
   @IsOptional()
   @IsBoolean()
   cloudEnabled?: boolean;
-
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  cloudMonthlyRate?: number;
 
   @IsOptional()
   @IsInt()
@@ -101,19 +87,6 @@ export class UpsertJobOrderDto {
   @IsString()
   productId?: string;
 
-  @IsNumber()
-  @Min(0)
-  salePrice!: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  discount?: number;
-
-  @IsOptional()
-  @IsEnum(DiscountType)
-  discountType?: DiscountType;
-
   @IsOptional()
   @IsString()
   remarks?: string;
@@ -131,16 +104,11 @@ export class UpsertJobOrderDto {
   @Min(1)
   cameraCount?: number;
 
+  /** CCTV / Signage: fixed installer labor pay for this order (the installer's earning). */
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  cameraRate?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  laborPct?: number;
+  laborAmount?: number;
 
   @IsOptional()
   @IsEnum(DocType)
@@ -156,7 +124,7 @@ export class UpsertJobOrderDto {
   @IsBoolean()
   includesBackofficeExtension?: boolean;
 
-  /** SOFTWARE orders only: one entry per computer. When present the server recomputes salePrice and cloudTotal. */
+  /** SOFTWARE orders only: one entry per computer. When present the server carries the cloud subscription flags. */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(100)

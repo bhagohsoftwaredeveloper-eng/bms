@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  applyProduct, blankUnit, computeTotals, detachItems, fromSavedUnits, groupItems,
-  legacyUnit, sumUnits, unitCloudTotal, unitsForCount,
-} from './job-order-units';
-import type { SoftwareProduct } from './types';
-
-const product = { id: 'p1', productName: 'NenPos', version: '3.0', licenseType: 'SUBSCRIPTION_MONTHLY', price: '49000', maintenanceFee: '500' } as SoftwareProduct;
+import { detachItems, fromSavedUnits, groupItems, legacyUnit, unitsForCount } from './job-order-units';
 
 describe('unitsForCount', () => {
   it('creates N blank labelled computers, at least 1 and at most 20', () => {
@@ -19,45 +13,15 @@ describe('unitsForCount', () => {
   });
 });
 
-describe('applyProduct', () => {
-  it('fills product, price and cloud rate from the product', () => {
-    const u = applyProduct(blankUnit(0), product);
-    expect(u).toMatchObject({ productId: 'p1', price: 49000, cloudMonthlyRate: 500 });
-  });
-  it('clears the product when none is given', () => {
-    const u = applyProduct({ ...blankUnit(0), productId: 'p1', price: 5 }, undefined);
-    expect(u.productId).toBe('');
-  });
-});
-
-describe('sumUnits / unitCloudTotal', () => {
-  it('sums systems and cloud (rate x months) for enabled units only', () => {
-    const a = { ...blankUnit(0), price: 1000, cloudEnabled: true, cloudMonthlyRate: 500, cloudMonths: 3 };
-    const b = { ...blankUnit(1), price: 2000, cloudEnabled: false, cloudMonthlyRate: 500, cloudMonths: 3 };
-    expect(unitCloudTotal(a)).toBe(1500);
-    expect(sumUnits([a, b])).toEqual({ systemsTotal: 3000, cloudTotal: 1500 });
-  });
-});
-
-describe('computeTotals', () => {
-  it('adds cloud to the subtotal and applies the discount to it', () => {
-    const t = computeTotals(10000, 10, 'PERCENTAGE', [{ quantity: 1, unitPrice: 1000 }], 1000);
-    expect(t).toEqual({ materialsTotal: 1000, subtotal: 12000, discountAmt: 1200, grandTotal: 10800 });
-  });
-  it('defaults cloud to 0 and never goes negative', () => {
-    expect(computeTotals(100, 500, 'FIXED', []).grandTotal).toBe(0);
-  });
-});
-
 describe('fromSavedUnits / legacyUnit', () => {
   it('uses the saved id as the draft key so items can be re-linked', () => {
     const [u] = fromSavedUnits([
-      { id: 'srv-1', jobOrderId: 'jo', label: 'Front', sortOrder: 0, productId: 'p1', price: '49000', cloudEnabled: true, cloudMonthlyRate: '500', cloudMonths: 2 },
+      { id: 'srv-1', jobOrderId: 'jo', label: 'Front', sortOrder: 0, productId: 'p1', cloudEnabled: true, cloudMonths: 2 },
     ]);
-    expect(u).toMatchObject({ _key: 'srv-1', label: 'Front', price: 49000, cloudEnabled: true, cloudMonthlyRate: 500, cloudMonths: 2 });
+    expect(u).toMatchObject({ _key: 'srv-1', label: 'Front', cloudEnabled: true, cloudMonths: 2 });
   });
   it('wraps an order without units in one implicit computer', () => {
-    expect(legacyUnit('p1', 49000)).toMatchObject({ label: 'Computer 1', productId: 'p1', price: 49000, cloudEnabled: false });
+    expect(legacyUnit('p1')).toMatchObject({ label: 'Computer 1', productId: 'p1', cloudEnabled: false });
   });
 });
 

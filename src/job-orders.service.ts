@@ -5,7 +5,7 @@ import { PrismaService } from './prisma.service';
 import { InventoryService } from './inventory.service';
 import { ConvertJobOrderDto, UpsertJobOrderDto } from './upsert-job-order.dto';
 import { ensureLaborEarning } from './job-order-labor.util';
-import { computeUnitTotals, validateUnits } from './job-order-units.util';
+import { validateUnits } from './job-order-units.util';
 
 const INCLUDE_FULL = {
   client: true,
@@ -45,21 +45,15 @@ export class JobOrdersService {
     if (units.length) {
       validateUnits(units, dto.items.map((i) => i.unitKey));
     }
-    const unitTotals = units.length ? computeUnitTotals(units) : null;
 
     const data = {
       clientId: dto.clientId,
-      productId: unitTotals ? (units[0].productId ?? null) : (dto.productId ?? null),
-      salePrice: unitTotals ? unitTotals.salePrice : dto.salePrice,
-      cloudTotal: unitTotals ? unitTotals.cloudTotal : 0,
-      discount: dto.discount ?? 0,
-      discountType: dto.discountType ?? 'FIXED',
+      productId: units.length ? (units[0].productId ?? null) : (dto.productId ?? null),
       remarks: dto.remarks ?? null,
       status: dto.status ?? JobOrderStatus.DRAFT,
       type,
       cameraCount: dto.cameraCount ?? null,
-      cameraRate: dto.cameraRate ?? null,
-      laborPct: dto.laborPct ?? null,
+      laborAmount: type === JobOrderType.SOFTWARE ? null : (dto.laborAmount ?? null),
       docType: dto.docType ?? DocType.JOB_ORDER,
       includeAgreement: dto.includeAgreement ?? false,
       includesBackofficeExtension: dto.includesBackofficeExtension ?? false,
@@ -70,7 +64,7 @@ export class JobOrdersService {
       name: item.name,
       description: item.description ?? null,
       quantity: item.quantity,
-      unitPrice: item.unitPrice,
+      unitPrice: 0,
       inventoryItemId: item.inventoryItemId ?? null,
       warrantyTier: item.warrantyTier ?? 'ACCESSORY',
     });
@@ -103,6 +97,7 @@ export class JobOrdersService {
           data: {
             jobId: dto.jobId,
             ...data,
+            salePrice: 0,
             items: { createMany: { data: itemsCreate } },
           },
           include: INCLUDE_FULL,
@@ -118,9 +113,7 @@ export class JobOrdersService {
               label: u.label,
               sortOrder: index,
               productId: u.productId ?? null,
-              price: u.price,
               cloudEnabled: u.cloudEnabled ?? false,
-              cloudMonthlyRate: u.cloudEnabled ? (u.cloudMonthlyRate ?? 0) : null,
               cloudMonths: u.cloudEnabled ? (u.cloudMonths ?? 1) : null,
             },
           });

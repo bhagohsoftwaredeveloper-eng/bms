@@ -15,7 +15,6 @@ interface SelectedComponent {
   inventoryItemId: string;
   name: string;
   quantity: number;
-  unitPrice: number;
 }
 
 export interface ManagePackagesDialogProps {
@@ -100,7 +99,6 @@ export function ManagePackagesDialog({ isOpen, onClose }: ManagePackagesDialogPr
         inventoryItemId: c.inventoryItemId,
         name: c.inventoryItem?.name ?? c.inventoryItemId,
         quantity: c.quantity,
-        unitPrice: Number(c.inventoryItem?.unitPrice ?? 0),
       })),
     );
     setFormError('');
@@ -112,7 +110,7 @@ export function ManagePackagesDialog({ isOpen, onClose }: ManagePackagesDialogPr
     setSelected((prev) =>
       prev.some((s) => s.inventoryItemId === item.id)
         ? prev.filter((s) => s.inventoryItemId !== item.id)
-        : [...prev, { inventoryItemId: item.id, name: item.name, quantity: 1, unitPrice: Number(item.unitPrice) }],
+        : [...prev, { inventoryItemId: item.id, name: item.name, quantity: 1 }],
     );
   };
 
@@ -140,7 +138,6 @@ export function ManagePackagesDialog({ isOpen, onClose }: ManagePackagesDialogPr
   };
 
   const packages = packagesQuery.data ?? [];
-  const formTotal = selected.reduce((sum, s) => sum + s.quantity * s.unitPrice, 0);
 
   return (
     <Dialog isOpen={isOpen} onClose={onClose} title="Manage packages" maxWidth={680}>
@@ -186,8 +183,6 @@ export function ManagePackagesDialog({ isOpen, onClose }: ManagePackagesDialogPr
                 <tr>
                   <th>Component</th>
                   <th style={{ width: 70, textAlign: 'center' }}>Qty</th>
-                  <th style={{ width: 110, textAlign: 'right' }}>Unit price</th>
-                  <th style={{ width: 110, textAlign: 'right' }}>Subtotal</th>
                   <th style={{ width: 36 }}></th>
                 </tr>
               </thead>
@@ -204,8 +199,6 @@ export function ManagePackagesDialog({ isOpen, onClose }: ManagePackagesDialogPr
                         style={{ width: 56, textAlign: 'center', padding: '0.25rem 0.4rem' }}
                       />
                     </td>
-                    <td style={{ textAlign: 'right' }}>₱{s.unitPrice.toLocaleString()}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>₱{(s.quantity * s.unitPrice).toLocaleString()}</td>
                     <td>
                       <button
                         type="button"
@@ -219,19 +212,8 @@ export function ManagePackagesDialog({ isOpen, onClose }: ManagePackagesDialogPr
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700 }}>Package total</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>₱{formTotal.toLocaleString()}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
             </table>
           )}
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.5rem' }}>
-            The package total is computed from each component's current price at the time it is inserted into a job
-            order or quotation.
-          </p>
           {formError && <p className="error-text" style={{ marginBottom: '0.5rem' }}>{formError}</p>}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="submit" className="btn btn-primary" style={{ fontSize: '0.85rem' }} disabled={saveMutation.isPending}>

@@ -12,7 +12,8 @@ import { DevProjectDetailPage } from './pages/DevProjectDetailPage';
 import { DevelopersPage } from './pages/DevelopersPage';
 import { DownloadLeadsPage } from './pages/DownloadLeadsPage';
 import { EarningsPage } from './pages/EarningsPage';
-import { FinancialReportsPage } from './pages/FinancialReportsPage';
+import { InstallerReportsPage } from './pages/InstallerReportsPage';
+import { ReportsPage } from './pages/ReportsPage';
 import { JobOrderPage } from './pages/JobOrderPage';
 import { JobOrdersPage } from './pages/JobOrdersPage';
 import { JobsPage } from './pages/JobsPage';
@@ -48,6 +49,22 @@ function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/earnings" element={<EarningsPage />} />
         <Route path="/withdrawals" element={<WithdrawalsPage />} />
+        <Route
+          path="/reports"
+          element={
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF']}>
+              <ReportsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/installers"
+          element={
+            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF']}>
+              <InstallerReportsPage />
+            </RequireAuth>
+          }
+        />
 
         <Route
           path="/dev-projects"
@@ -95,14 +112,6 @@ function App() {
           element={
             <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'DESIGNER', 'LIAISON', 'SALES_STAFF', 'ENCODER']}>
               <JobOrderPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/financial-reports"
-          element={
-            <RequireAuth roles={['SUPER_ADMIN', 'ADMIN_STAFF', 'SALES_STAFF']}>
-              <FinancialReportsPage />
             </RequireAuth>
           }
         />

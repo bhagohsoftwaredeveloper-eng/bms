@@ -56,7 +56,6 @@ function buildService(tx: ReturnType<typeof buildTx>) {
 
 const baseDto: UpsertJobOrderDto = {
   clientId: 'client-1',
-  salePrice: 10000,
   items: [],
 };
 
@@ -126,8 +125,8 @@ describe('JobOrdersService.upsert', () => {
       {
         ...baseDto,
         items: [
-          { name: 'System Unit', quantity: 1, unitPrice: 20000, warrantyTier: 'MAIN_SET' },
-          { name: 'Cash Drawer', quantity: 1, unitPrice: 3000, warrantyTier: 'ACCESSORY' },
+          { name: 'System Unit', quantity: 1, warrantyTier: 'MAIN_SET' },
+          { name: 'Cash Drawer', quantity: 1, warrantyTier: 'ACCESSORY' },
         ],
       },
       user,
@@ -141,7 +140,7 @@ describe('JobOrdersService.upsert', () => {
     const tx = buildTx();
     const { service } = buildService(tx);
 
-    await service.upsert({ ...baseDto, items: [{ name: 'Cash Drawer', quantity: 1, unitPrice: 3000 }] }, user);
+    await service.upsert({ ...baseDto, items: [{ name: 'Cash Drawer', quantity: 1 }] }, user);
 
     const created = tx.jobOrder.create.mock.calls[0][0].data.items.createMany.data;
     expect(created[0].warrantyTier).toBe('ACCESSORY');
@@ -321,19 +320,18 @@ describe('JobOrdersService include shapes', () => {
 
 describe('JobOrdersService.upsert with computers', () => {
   const units = [
-    { key: 'k1', label: 'Front', productId: 'p1', price: 49000, cloudEnabled: true, cloudMonthlyRate: 500, cloudMonths: 2 },
-    { key: 'k2', label: 'Back', productId: 'p2', price: 30000 },
+    { key: 'k1', label: 'Front', productId: 'p1', cloudEnabled: true, cloudMonths: 2 },
+    { key: 'k2', label: 'Back', productId: 'p2' },
   ];
 
-  it('recomputes salePrice/cloudTotal from units and ignores the client salePrice', async () => {
+  it('takes the product from the first computer and stores no price', async () => {
     const tx = buildTx();
     const { service } = buildService(tx);
 
-    await service.upsert({ ...baseDto, salePrice: 1, units }, user);
+    await service.upsert({ ...baseDto, units }, user);
 
     const data = tx.jobOrder.create.mock.calls[0][0].data;
-    expect(data.salePrice).toBe(79000);
-    expect(data.cloudTotal).toBe(1000);
+    expect(data.salePrice).toBe(0);
     expect(data.productId).toBe('p1');
   });
 
@@ -346,8 +344,8 @@ describe('JobOrdersService.upsert with computers', () => {
         ...baseDto,
         units,
         items: [
-          { name: 'Printer', quantity: 1, unitPrice: 100, unitKey: 'k2' },
-          { name: 'Router', quantity: 1, unitPrice: 50 },
+          { name: 'Printer', quantity: 1, unitKey: 'k2' },
+          { name: 'Router', quantity: 1 },
         ],
       },
       user,
@@ -359,6 +357,18 @@ describe('JobOrdersService.upsert with computers', () => {
     expect(tx.jobOrderItem.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ name: 'Printer', unitId: 'unit-1' })],
     });
+  });
+
+  it('leaves previously stored (now hidden) prices untouched when re-saving', async () => {
+    const tx = buildTx();
+    const { service, prisma } = buildService(tx);
+    prisma.jobOrder.findUnique.mockResolvedValue({ id: 'jo-1', status: 'DRAFT' });
+
+    await service.upsert({ ...baseDto, id: 'jo-1' }, user);
+
+    const data = tx.jobOrder.update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('salePrice');
+    expect(data).not.toHaveProperty('discount');
   });
 
   it('deletes old units when re-saving an existing order', async () => {
@@ -376,7 +386,7 @@ describe('JobOrdersService.upsert with computers', () => {
     const { service } = buildService(tx);
 
     await expect(
-      service.upsert({ ...baseDto, units, items: [{ name: 'X', quantity: 1, unitPrice: 1, unitKey: 'nope' }] }, user),
+      service.upsert({ ...baseDto, units, items: [{ name: 'X', quantity: 1, unitKey: 'nope' }] }, user),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -384,11 +394,8 @@ describe('JobOrdersService.upsert with computers', () => {
     const tx = buildTx();
     const { service } = buildService(tx);
 
-    await service.upsert({ ...baseDto, salePrice: 10000 }, user);
+    await service.upsert({ ...baseDto }, user);
 
-    const data = tx.jobOrder.create.mock.calls[0][0].data;
-    expect(data.salePrice).toBe(10000);
-    expect(data.cloudTotal).toBe(0);
     expect(tx.jobOrderUnit.create).not.toHaveBeenCalled();
   });
 
@@ -399,7 +406,6 @@ describe('JobOrdersService.upsert with computers', () => {
     await service.upsert({ ...baseDto, type: 'CCTV', units }, user);
 
     expect(tx.jobOrderUnit.create).not.toHaveBeenCalled();
-    expect(tx.jobOrder.create.mock.calls[0][0].data.salePrice).toBe(10000);
   });
 
   it('keeps a unit-tagged item as a general item when units are ignored (CCTV order)', async () => {
@@ -407,7 +413,7 @@ describe('JobOrdersService.upsert with computers', () => {
     const { service } = buildService(tx);
 
     await service.upsert(
-      { ...baseDto, type: 'CCTV', units, items: [{ name: 'Cable', quantity: 1, unitPrice: 10, unitKey: 'k1' }] },
+      { ...baseDto, type: 'CCTV', units, items: [{ name: 'Cable', quantity: 1, unitKey: 'k1' }] },
       user,
     );
 

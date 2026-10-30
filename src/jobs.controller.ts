@@ -27,8 +27,9 @@ export class JobsController {
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('mine') mine?: string) {
     const userRoles: UserRole[] = user.roles ?? [user.role];
+    const isAdminLike = userRoles.includes(UserRole.SUPER_ADMIN) || userRoles.includes(UserRole.ADMIN_STAFF);
     const isInstallerRole = userRoles.includes(UserRole.INSTALLER);
-    const userId = isInstallerRole || mine === 'true' ? user.id : undefined;
+    const userId = !isAdminLike && (isInstallerRole || mine === 'true') ? user.id : undefined;
     return this.jobsService.findAll(userId, isInstallerRole ? UserRole.INSTALLER : user.role);
   }
 

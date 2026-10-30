@@ -95,6 +95,15 @@ reload.
 **Expected:** with two browsers open (admin + installer), an installer submitting
 proof updates the admin's *Open Installation Jobs* card without a refresh.
 
+## Reports
+
+Users with financial-report access open **Reports** in the sidebar. The page
+shows report cards for the reports available to their role: **Financial
+Reports** for Super Admin, Admin Staff, and Sales Staff, and **Installer Report**
+for Super Admin and Admin Staff. Installer reports include assigned clients,
+installation status, and earnings; the report can be downloaded as a PDF or
+printed.
+
 ## Expected behaviour summary
 
 | # | Assertion |

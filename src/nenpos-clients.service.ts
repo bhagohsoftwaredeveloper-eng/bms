@@ -17,7 +17,15 @@ interface ExcelRow {
   'Installer'?: unknown;
   'Notes'?: unknown;
   'Address'?: unknown;
+  /** Set by the "clients without license" export: the row updates this record instead of creating one. */
+  'Record ID'?: unknown;
   [key: string]: unknown;
+}
+
+/** A real license key — not blank and not one of the TRIAL / CANCELLED markers. */
+function isLicenseKey(value: string | null): boolean {
+  const v = value?.trim().toUpperCase() ?? '';
+  return !!v && v !== 'TRIAL' && v !== 'CANCELLED';
 }
 
 function parseExcelDate(value: unknown): Date | null {
@@ -109,20 +117,51 @@ export class NenposClientsService {
       if (!clientName) throw new BadRequestException('Each row must have a Client Name.');
 
       return {
-        clientId: clientId || generateClientId(),
-        clientName,
-        startDate: parseExcelDate(row['Start Date']),
-        expiryDate: parseExcelDate(row['Expiry Date']),
-        license: str(row['License']),
-        status: str(row['Status']) ?? 'ACTIVE',
-        installer: str(row['Installer']),
-        notes: str(row['Notes']),
-        address: str(row['Address']),
+        recordId: str(row['Record ID']),
+        rawClientId: clientId,
+        data: {
+          clientId: clientId || generateClientId(),
+          clientName,
+          startDate: parseExcelDate(row['Start Date']),
+          expiryDate: parseExcelDate(row['Expiry Date']),
+          license: str(row['License']),
+          status: str(row['Status']) ?? 'ACTIVE',
+          installer: str(row['Installer']),
+          notes: str(row['Notes']),
+          address: str(row['Address']),
+        },
       };
     });
 
-    await this.prisma.nenposClient.createMany({ data: records });
-    return { imported: records.length };
+    const updates = records.filter((r) => r.recordId);
+    const creates = records.filter((r) => !r.recordId).map((r) => r.data);
+
+    const existing = updates.length
+      ? await this.prisma.nenposClient.findMany({
+          where: { id: { in: updates.map((u) => u.recordId!) }, voidedAt: null },
+        })
+      : [];
+    const existingById = new Map(existing.map((e) => [e.id, e]));
+    const unknown = updates.filter((u) => !existingById.has(u.recordId!));
+    if (unknown.length) {
+      throw new BadRequestException(
+        `Record ID not found or voided: ${unknown.slice(0, 5).map((u) => u.recordId).join(', ')}${unknown.length > 5 ? '…' : ''}. Nothing was imported.`,
+      );
+    }
+
+    await this.prisma.$transaction([
+      ...updates.map(({ recordId, rawClientId, data }) => {
+        const prev = existingById.get(recordId!)!;
+        // Entering a real key ends the trial/no-license period, so its expiry no longer applies.
+        const keyAdded = isLicenseKey(data.license) && !isLicenseKey(prev.license);
+        return this.prisma.nenposClient.update({
+          where: { id: recordId! },
+          data: { ...data, clientId: rawClientId ?? prev.clientId, ...(keyAdded ? { expiryDate: null, isTrial: false } : {}) },
+        });
+      }),
+      this.prisma.nenposClient.createMany({ data: creates }),
+    ]);
+    return { imported: creates.length, updated: updates.length };
   }
 
   async update(id: string, dto: UpdateNenposClientDto) {
