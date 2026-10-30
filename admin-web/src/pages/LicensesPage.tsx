@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { jsPDF } from 'jspdf';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
@@ -7,7 +8,7 @@ import { SearchableClientSelect } from '../components/SearchableClientSelect';
 import { Pagination, usePagination } from '../components/Pagination';
 import { RowActionsMenu } from '../components/RowActionsMenu';
 import { useAuthStore } from '../lib/auth-store';
-import type { AuthenticatedUser, Client, License, NenposClient, SoftwareProduct } from '../lib/types';
+import type { AuthenticatedUser, Client, JobOrder, License, NenposClient, SoftwareProduct } from '../lib/types';
 
 const EMPTY_FINGERPRINT_FORM = { cpu: '', disk: '', mac: '' };
 
@@ -230,23 +231,124 @@ function TabButton({ label, active, count, onClick }: { label: string; active: b
 
 // ── NENPOS Clients Tab ──────────────────────────────────────────────────────
 
-function downloadTemplate() {
-  const headers = ['Client ID', 'Client Name', 'Start Date', 'Expiry Date', 'License', 'Status', 'Installer', 'Notes', 'Address'];
-  const example = ['NPC-ABC123', 'Juan dela Cruz Store', '2023-01-15', '2024-01-15', 'NENPOS-XXXX-XXXX', 'ACTIVE', 'John Doe', 'Annual subscription', 'Brgy. Example, Cebu City'];
-  const csv = [headers.join(','), example.map((v) => `"${v}"`).join(',')].join('\r\n');
+const isExpired = (r: NenposClient) => !!r.expiryDate && new Date(r.expiryDate).getTime() < Date.now();
+
+/**
+ * Landscape PDF of the given NENPOS rows, drawn directly with jsPDF (no HTML snapshot).
+ * Expired rows are shaded red with an EXPIRED tag, listed first, and counted in the summary line.
+ */
+function downloadNenposPdf(rows: NenposClient[]) {
+  const sorted = [...rows].sort((a, b) => Number(isExpired(b)) - Number(isExpired(a)) || a.clientName.localeCompare(b.clientName));
+  const expiredCount = sorted.filter(isExpired).length;
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 8;
+  const lineH = 3.7;
+  const pad = 1.4;
+  const cols = [
+    { title: 'Client', w: 62 }, { title: 'Status', w: 20 }, { title: 'License', w: 34 }, { title: 'Start Date', w: 22 },
+    { title: 'Expiry Date', w: 26 }, { title: 'Installer', w: 30 }, { title: 'Address', w: 52 }, { title: 'Notes', w: 35 },
+  ];
+  const tableW = cols.reduce((t, c) => t + c.w, 0);
+  const dash = (v: string | null | undefined) => (v && v.trim() ? v.trim() : '-');
+
+  const drawHeader = (y: number) => {
+    doc.setFillColor(235, 235, 235);
+    doc.rect(margin, y, tableW, 6, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(0);
+    let x = margin;
+    for (const c of cols) { doc.text(c.title, x + pad, y + 4.2); x += c.w; }
+    return y + 6;
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(0);
+  doc.text('NENPOS Licenses', margin, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(70);
+  doc.text(`Generated ${new Date().toLocaleString()}  |  ${sorted.length} record${sorted.length === 1 ? '' : 's'}`, margin, 17.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(185, 28, 28);
+  doc.text(`${expiredCount} expired (shown first, shaded red)`, margin, 22);
+
+  let y = drawHeader(26);
+  for (const r of sorted) {
+    const expired = isExpired(r);
+    const cells = [
+      `${r.clientName}\n${r.clientId}`,
+      dash(r.status),
+      dash(r.license),
+      r.startDate || r.installDate ? fmtDate(r.isTrial ? (r.installDate ?? r.startDate) : r.startDate) : '-',
+      r.expiryDate ? `${fmtDate(r.expiryDate)}${expired ? '\nEXPIRED' : ''}` : '-',
+      dash(r.installer),
+      dash(r.address),
+      dash(r.notes),
+    ];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const wrapped = cells.map((text, i) => doc.splitTextToSize(text, cols[i].w - pad * 2) as string[]);
+    const rowH = Math.max(...wrapped.map((l) => l.length)) * lineH + pad * 2;
+
+    if (y + rowH > pageH - margin) {
+      doc.addPage();
+      y = drawHeader(margin);
+    }
+    if (expired) {
+      doc.setFillColor(254, 226, 226);
+      doc.rect(margin, y, tableW, rowH, 'F');
+    }
+    doc.setDrawColor(210);
+    doc.line(margin, y + rowH, margin + tableW, y + rowH);
+
+    let x = margin;
+    wrapped.forEach((lines, i) => {
+      const isExpiryCell = i === 4 && expired;
+      doc.setFont('helvetica', isExpiryCell ? 'bold' : 'normal');
+      doc.setTextColor(isExpiryCell ? 185 : 0, isExpiryCell ? 28 : 0, isExpiryCell ? 28 : 0);
+      doc.text(lines, x + pad, y + pad + 2.8);
+      x += cols[i].w;
+    });
+    y += rowH;
+  }
+
+  doc.save(`nenpos_licenses_${toIsoDateLocal(new Date())}.pdf`);
+}
+
+/** Saves rows as a UTF-8 CSV (with BOM so Excel keeps accents). */
+function saveCsv(filename: string, headers: string[], rows: Array<Array<string | null | undefined>>) {
+  const cell = (v: string | null | undefined) => `"${(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'nenpos_clients_template.csv';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
+const NENPOS_TEMPLATE_HEADERS = ['Client ID', 'Client Name', 'Start Date', 'Expiry Date', 'License', 'Status', 'Installer', 'Notes', 'Address'];
+
+function downloadTemplate() {
+  const example = ['NPC-ABC123', 'Juan dela Cruz Store', '2023-01-15', '2024-01-15', 'NENPOS-XXXX-XXXX', 'ACTIVE', 'John Doe', 'Annual subscription', 'Brgy. Example, Cebu City'];
+  saveCsv('nenpos_clients_template.csv', NENPOS_TEMPLATE_HEADERS, [example]);
+}
+
 const TRIAL_DAYS = 30;
+
+const NENPOS_STATUSES = ['ACTIVE', 'EXPIRED', 'SUSPENDED', 'CANCELLED', 'TRANSFER'];
 
 /** Non-key values that appear in the NENPOS license column; anything else is a real license key. */
 const SPECIAL_LICENSES = ['TRIAL', 'CANCELLED'];
+const isLicenseKey = (value: string | null | undefined) => {
+  const v = value?.trim().toUpperCase() ?? '';
+  return !!v && !SPECIAL_LICENSES.includes(v);
+};
 const NENPOS_LICENSE_FILTERS = [
   { value: 'KEY', label: 'Has license key' },
   { value: 'TRIAL', label: 'TRIAL' },
@@ -330,7 +432,9 @@ function generateClientCode(): string {
 function NenposClientsTab() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadResult, setUploadResult] = useState<{ imported: number } | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ imported: number; updated?: number } | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState('');
   const [uploadError, setUploadError] = useState('');
   const [viewRecord, setViewRecord] = useState<NenposClient | null>(null);
   const [search, setSearch] = useState('');
@@ -348,6 +452,86 @@ function NenposClientsTab() {
   const [voidError, setVoidError] = useState('');
 
   const closeVoid = () => { setVoidingRecord(null); setVoidForm(EMPTY_SECURE_FORM); setVoidError(''); };
+
+  // NENPOS -> Bhagoh transfer: create the Bhagoh license, then void the NENPOS row linked to it.
+  const [bhagohRecord, setBhagohRecord] = useState<NenposClient | null>(null);
+  const [bhagohForm, setBhagohForm] = useState({ clientId: '', productId: '', licenseKey: '', notes: '', password: '', confirmName: '' });
+  const [bhagohError, setBhagohError] = useState('');
+  const [bhagohSuccess, setBhagohSuccess] = useState<string | null>(null);
+
+  const closeBhagoh = () => { setBhagohRecord(null); setBhagohError(''); };
+
+  const bhagohClientsQuery = useQuery({
+    queryKey: ['clients'],
+    queryFn: async () => (await api.get<Client[]>('/clients')).data,
+    enabled: !!bhagohRecord,
+  });
+  const bhagohProductsQuery = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => (await api.get<SoftwareProduct[]>('/software-products')).data,
+    enabled: !!bhagohRecord,
+  });
+
+  const openBhagoh = (row: NenposClient) => {
+    const key = row.license?.trim().toUpperCase() ?? '';
+    setBhagohForm({
+      clientId: '',
+      productId: '',
+      licenseKey: key && !SPECIAL_LICENSES.includes(key) ? row.license!.trim() : '',
+      notes: row.notes ?? '',
+      password: '',
+      confirmName: '',
+    });
+    setBhagohError('');
+    setBhagohSuccess(null);
+    setBhagohRecord(row);
+  };
+
+  // Pre-select the Bhagoh client whose code or name matches the NENPOS record.
+  useEffect(() => {
+    if (!bhagohRecord || bhagohForm.clientId || !bhagohClientsQuery.data) return;
+    const name = bhagohRecord.clientName.trim().toLowerCase();
+    const match = bhagohClientsQuery.data.find((c) =>
+      (bhagohRecord.clientId && c.clientCode === bhagohRecord.clientId) || c.businessName.trim().toLowerCase() === name);
+    if (match) setBhagohForm((f) => ({ ...f, clientId: match.id }));
+  }, [bhagohRecord, bhagohClientsQuery.data, bhagohForm.clientId]);
+
+  const bhagohMutation = useMutation({
+    mutationFn: async () => {
+      const record = bhagohRecord!;
+      const notes = bhagohForm.notes.trim() || undefined;
+      const payload = record.isTrial && record.expiryDate
+        ? { clientId: bhagohForm.clientId, productId: bhagohForm.productId, isTrial: true, expirationDate: record.expiryDate, notes }
+        : { clientId: bhagohForm.clientId, productId: bhagohForm.productId, licenseKey: bhagohForm.licenseKey.trim(), notes };
+      const license = (await api.post<License>('/licenses', payload)).data;
+      try {
+        await api.post(`/nenpos-clients/${record.id}/void`, {
+          password: bhagohForm.password,
+          confirmName: bhagohForm.confirmName.trim(),
+          reason: 'Transferred to Bhagoh',
+          transferredToLicenseId: license.id,
+        });
+      } catch (err: any) {
+        const message = err?.response?.data?.message;
+        throw new Error(
+          `The Bhagoh license was created, but the NENPOS record was not voided: ${Array.isArray(message) ? message[0] : message ?? 'unknown error'}. Void it from its row.`,
+        );
+      }
+      return license;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nenpos-clients'] });
+      queryClient.invalidateQueries({ queryKey: ['licenses'] });
+      setBhagohSuccess(bhagohRecord?.clientName ?? '');
+      closeBhagoh();
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message;
+      setBhagohError(!err?.response && err instanceof Error
+        ? err.message
+        : Array.isArray(message) ? message[0] : message ?? 'Transfer failed — nothing was changed.');
+    },
+  });
 
   const voidMutation = useMutation({
     mutationFn: async () => (await api.post(`/nenpos-clients/${voidingRecord!.id}/void`, {
@@ -381,8 +565,9 @@ function NenposClientsTab() {
     clientName: addForm.clientName.trim(),
     license: addForm.license.trim() || undefined,
     clientId: addForm.clientId.trim() || undefined,
-    startDate: addForm.startDate || undefined,
-    expiryDate: addForm.expiryDate || undefined,
+    // null (not undefined) so a date cleared in the edit form is cleared server-side too.
+    startDate: addForm.startDate || null,
+    expiryDate: addForm.expiryDate || null,
     status: addForm.status || undefined,
     installer: addForm.installer.trim() || undefined,
     address: addForm.address.trim() || undefined,
@@ -471,15 +656,16 @@ function NenposClientsTab() {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const listQuery = useQuery({
-    queryKey: ['nenpos-clients', { includeVoided: showVoided }],
-    queryFn: async () => (await api.get<NenposClient[]>('/nenpos-clients', { params: showVoided ? { includeVoided: true } : undefined })).data,
+    queryKey: ['nenpos-clients', { includeVoided: true }],
+    // Always fetch voided rows so transferred customers stay visible; plain voids still need the toggle.
+    queryFn: async () => (await api.get<NenposClient[]>('/nenpos-clients', { params: { includeVoided: true } })).data,
   });
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const fd = new FormData();
       fd.append('file', file);
-      return (await api.post<{ imported: number }>('/nenpos-clients/upload', fd, {
+      return (await api.post<{ imported: number; updated?: number }>('/nenpos-clients/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })).data;
     },
@@ -495,9 +681,10 @@ function NenposClientsTab() {
     },
   });
 
-  const allRecords = listQuery.data ?? [];
+  const allRecords = (listQuery.data ?? []).filter((r) => showVoided || !r.voidedAt || !!r.transferredToLicenseId);
 
-  const statusOptions = [...new Set(allRecords.map((r) => r.status).filter(Boolean) as string[])].sort();
+  // Always offer the form's statuses (e.g. TRANSFER) even before a record uses them.
+  const statusOptions = [...new Set([...NENPOS_STATUSES, ...(allRecords.map((r) => r.status).filter(Boolean) as string[])])].sort();
 
   const filtered = allRecords.filter((r) => {
     const q = search.toLowerCase();
@@ -541,6 +728,19 @@ function NenposClientsTab() {
         <button type="button" className="btn btn-secondary" onClick={downloadTemplate}>
           ↓ Download Template
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={pdfBusy || filtered.length === 0}
+          title="PDF of the records currently shown (respects search and filters); expired ones are shaded red"
+          onClick={() => {
+            setPdfBusy(true);
+            setPdfError('');
+            try { downloadNenposPdf(filtered); } catch { setPdfError('Could not create the PDF. Try again.'); } finally { setPdfBusy(false); }
+          }}
+        >
+          {pdfBusy ? 'Preparing PDF…' : '↓ Download PDF'}
+        </button>
         <label
           style={{
             display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
@@ -576,12 +776,21 @@ function NenposClientsTab() {
 
       {uploadResult && (
         <div style={{ padding: '0.75rem 1rem', background: 'rgba(22,163,74,0.1)', border: '1px solid var(--success)', borderRadius: 8, color: 'var(--success)', marginBottom: '1rem', fontWeight: 600 }}>
-          ✓ Successfully imported {uploadResult.imported} record{uploadResult.imported !== 1 ? 's' : ''}.
+          ✓ Successfully imported {uploadResult.imported} record{uploadResult.imported !== 1 ? 's' : ''}
+          {!!uploadResult.updated && <> and updated {uploadResult.updated} existing record{uploadResult.updated !== 1 ? 's' : ''}</>}.
         </div>
       )}
+      {pdfError && <p className="error-text">{pdfError}</p>}
       {uploadError && (
         <div style={{ padding: '0.75rem 1rem', background: 'rgba(220,38,38,0.08)', border: '1px solid var(--danger)', borderRadius: 8, color: 'var(--danger)', marginBottom: '1rem' }}>
           {uploadError}
+        </div>
+      )}
+
+      {bhagohSuccess && (
+        <div style={{ padding: '0.75rem 1rem', background: 'rgba(22,163,74,0.1)', border: '1px solid var(--success)', borderRadius: 8, color: 'var(--success)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+          <span>✓ Transferred <strong>{bhagohSuccess}</strong> to the Bhagoh Licenses tab. The NENPOS row is now marked transferred.</span>
+          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => setBhagohSuccess(null)}>Dismiss</button>
         </div>
       )}
 
@@ -691,6 +900,9 @@ function NenposClientsTab() {
                                 ...(!row.voidedAt ? [{ label: 'Edit', onClick: () => openEdit(row) }] : []),
                                 { label: 'View', onClick: () => setViewRecord(row) },
                                 ...(isSuperAdmin && !row.voidedAt
+                                  ? [{ label: 'Transfer to Bhagoh', onClick: () => openBhagoh(row) }]
+                                  : []),
+                                ...(isSuperAdmin && !row.voidedAt
                                   ? [{
                                       label: 'Void',
                                       danger: true,
@@ -724,6 +936,90 @@ function NenposClientsTab() {
           </div>
         )}
       </div>
+
+      {/* Transfer to Bhagoh dialog — SUPER_ADMIN only */}
+      <Dialog isOpen={!!bhagohRecord} onClose={closeBhagoh} title="Transfer to Bhagoh" maxWidth={520}>
+        {bhagohRecord && (() => {
+          const isTrialRecord = !!bhagohRecord.isTrial && !!bhagohRecord.expiryDate;
+          const nameMatches = bhagohForm.confirmName.trim().toLowerCase() === bhagohRecord.clientName.trim().toLowerCase();
+          const missing = !bhagohForm.clientId ? 'Select the Bhagoh client.'
+            : !bhagohForm.productId ? 'Select a software product.'
+              : !isTrialRecord && !bhagohForm.licenseKey.trim() ? 'Enter the license key.'
+                : !bhagohForm.password ? 'Enter your password.'
+                  : !nameMatches ? `Name doesn't match — type "${bhagohRecord.clientName}" exactly.`
+                    : '';
+          return (
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (missing) { setBhagohError(missing); return; }
+              setBhagohError('');
+              bhagohMutation.mutate();
+            }}>
+              <div style={{ padding: '0.75rem', background: 'var(--bg)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Transferring NENPOS record:</div>
+                <div style={{ fontWeight: 600 }}>{bhagohRecord.clientName}</div>
+                <div style={{ fontFamily: 'monospace', marginTop: '0.3rem', color: 'var(--accent)', fontSize: '0.8rem' }}>
+                  {bhagohRecord.clientId || 'No client ID'} · {bhagohRecord.license ?? 'No license'}
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="bhagoh-client">Bhagoh client *</label>
+                <SearchableClientSelect id="bhagoh-client" clients={bhagohClientsQuery.data ?? []} value={bhagohForm.clientId}
+                  onChange={(value) => setBhagohForm({ ...bhagohForm, clientId: value })} />
+                {!bhagohForm.clientId && bhagohClientsQuery.data && (
+                  <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    No matching client found — pick one, or create it on the Clients page first.
+                  </p>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="bhagoh-product">Software product *</label>
+                <select id="bhagoh-product" required value={bhagohForm.productId}
+                  onChange={(e) => setBhagohForm({ ...bhagohForm, productId: e.target.value })}>
+                  <option value="">Select a product…</option>
+                  {bhagohProductsQuery.data?.map((p) => (
+                    <option key={p.id} value={p.id}>{p.productName} v{p.version}</option>
+                  ))}
+                </select>
+              </div>
+              {isTrialRecord ? (
+                <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  This is a trial record — a trial license expiring {fmtDate(bhagohRecord.expiryDate)} will be created.
+                </p>
+              ) : (
+                <div className="field">
+                  <label htmlFor="bhagoh-key">License key *</label>
+                  <input id="bhagoh-key" type="text" required value={bhagohForm.licenseKey} style={{ fontFamily: 'monospace' }}
+                    onChange={(e) => setBhagohForm({ ...bhagohForm, licenseKey: e.target.value })} />
+                </div>
+              )}
+              <div className="field">
+                <label htmlFor="bhagoh-notes">Notes (optional)</label>
+                <textarea id="bhagoh-notes" rows={2} value={bhagohForm.notes}
+                  onChange={(e) => setBhagohForm({ ...bhagohForm, notes: e.target.value })} />
+              </div>
+              <div className="field">
+                <label htmlFor="bhagoh-password">Your password *</label>
+                <input id="bhagoh-password" type="password" required autoComplete="current-password" value={bhagohForm.password}
+                  onChange={(e) => setBhagohForm({ ...bhagohForm, password: e.target.value })} />
+              </div>
+              <div className="field">
+                <label htmlFor="bhagoh-confirm">Type <strong>{bhagohRecord.clientName}</strong> to authorize *</label>
+                <input id="bhagoh-confirm" type="text" required autoComplete="off" value={bhagohForm.confirmName}
+                  placeholder={bhagohRecord.clientName}
+                  onChange={(e) => setBhagohForm({ ...bhagohForm, confirmName: e.target.value })} />
+              </div>
+              {bhagohError && <p className="error-text">{bhagohError}</p>}
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={bhagohMutation.isPending}>
+                  {bhagohMutation.isPending ? 'Transferring…' : 'Authorize transfer'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={closeBhagoh}>Cancel</button>
+              </div>
+            </form>
+          );
+        })()}
+      </Dialog>
 
       {/* Void dialog — SUPER_ADMIN only */}
       <Dialog isOpen={!!voidingRecord} onClose={closeVoid} title="Void NENPOS record" maxWidth={520}>
@@ -858,7 +1154,12 @@ function NenposClientsTab() {
             <label htmlFor="np-license">License</label>
             <input id="np-license" type="text" value={addForm.license} placeholder="License key"
               style={{ fontFamily: 'monospace' }}
-              onChange={(e) => setAddForm({ ...addForm, license: e.target.value })} />
+              onChange={(e) => {
+                const license = e.target.value;
+                // Entering a real key ends the trial/no-license period, so its expiry no longer applies.
+                const keyAdded = isLicenseKey(license) && !isLicenseKey(addForm.license);
+                setAddForm({ ...addForm, license, ...(keyAdded ? { isTrial: false, expiryDate: '' } : {}) });
+              }} />
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <div className="field" style={{ flex: 1 }}>
@@ -870,10 +1171,7 @@ function NenposClientsTab() {
               <label htmlFor="np-status">Status</label>
               <select id="np-status" value={addForm.status}
                 onChange={(e) => setAddForm({ ...addForm, status: e.target.value })}>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="EXPIRED">EXPIRED</option>
-                <option value="SUSPENDED">SUSPENDED</option>
-                <option value="CANCELLED">CANCELLED</option>
+                {NENPOS_STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
               </select>
             </div>
           </div>
@@ -1005,6 +1303,103 @@ function NenposClientsTab() {
   );
 }
 
+// ── Cloud Clients Tab ───────────────────────────────────────────────────────
+
+interface CloudSubscription {
+  key: string;
+  clientId: string;
+  clientName: string;
+  computer: string;
+  months: number;
+  start: Date;
+  end: Date;
+}
+
+/** One row per cloud-enabled computer on a live (not draft / cancelled / quotation) job order. */
+function buildCloudSubscriptions(orders: JobOrder[]): CloudSubscription[] {
+  return orders
+    .filter((o) => o.docType !== 'QUOTATION' && o.status !== 'DRAFT' && o.status !== 'CANCELLED')
+    .flatMap((o) => (o.units ?? [])
+      .filter((u) => u.cloudEnabled)
+      .map((u) => {
+        const start = new Date(o.createdAt);
+        const months = u.cloudMonths ?? 0;
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + months);
+        return {
+          key: u.id, clientId: o.clientId, clientName: o.client?.businessName ?? 'Unknown client',
+          computer: u.label, months, start, end,
+        };
+      }));
+}
+
+function CloudClientsTab({ orders, loading, failed }: { orders: JobOrder[]; loading: boolean; failed: boolean }) {
+  const [search, setSearch] = useState('');
+  const subs = buildCloudSubscriptions(orders);
+  const q = search.trim().toLowerCase();
+  const filtered = subs.filter((s) => !q || s.clientName.toLowerCase().includes(q) || s.computer.toLowerCase().includes(q));
+
+  const groups = filtered.reduce<Array<{ clientId: string; clientName: string; rows: CloudSubscription[] }>>((acc, row) => {
+    const g = acc.find((x) => x.clientId === row.clientId);
+    if (g) g.rows.push(row); else acc.push({ clientId: row.clientId, clientName: row.clientName, rows: [row] });
+    return acc;
+  }, []).sort((a, b) => a.clientName.localeCompare(b.clientName));
+
+  const { isExpanded, toggle } = useExpandedGroups(!!q);
+  const now = Date.now();
+
+  return (
+    <div>
+      <p style={{ color: 'var(--text-muted)', marginTop: 0, fontSize: '0.85rem' }}>
+        Clients with a cloud subscription, taken from the computers marked <strong>Cloud</strong> on their Job Orders.
+        To add or change one, edit the Job Order.
+      </p>
+      {subs.length > 0 && (
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by client or computer…" style={{ maxWidth: 360, marginBottom: '1rem' }} />
+      )}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto', padding: '1.75rem' }}>
+          {loading && <p style={{ margin: 0 }}>Loading…</p>}
+          {failed && <p className="error-text" style={{ margin: 0 }}>Failed to load cloud clients.</p>}
+          {!loading && !failed && subs.length === 0 && (
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>No cloud clients yet. Enable Cloud on a computer in a Job Order.</p>
+          )}
+          {groups.length > 0 && (
+            <table>
+              <thead>
+                <tr><th>Computer</th><th>Months</th><th>Start</th><th>Ends</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <Fragment key={g.clientId}>
+                    <GroupHeaderRow
+                      colSpan={5} title={g.clientName} count={g.rows.length}
+                      expanded={isExpanded(g.clientId)} onToggle={() => toggle(g.clientId)}
+                    />
+                    {isExpanded(g.clientId) && g.rows.map((r) => {
+                      const expired = r.end.getTime() < now;
+                      return (
+                        <tr key={r.key}>
+                          <td>{r.computer}</td>
+                          <td>{r.months}</td>
+                          <td>{r.start.toLocaleDateString()}</td>
+                          <td style={{ color: expired ? 'var(--danger)' : undefined }}>{r.end.toLocaleDateString()}</td>
+                          <td><StatusBadge status={expired ? 'EXPIRED' : 'ACTIVE'} /></td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export function LicensesPage() {
@@ -1013,7 +1408,7 @@ export function LicensesPage() {
   const isDeveloper = user?.role === 'DEVELOPER';
   const isAdminRole = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN_STAFF';
 
-  const [activeTab, setActiveTab] = useState<'licenses' | 'nenpos'>('licenses');
+  const [activeTab, setActiveTab] = useState<'licenses' | 'nenpos' | 'cloud'>('licenses');
   const [clientId, setClientId] = useState('');
   const [productId, setProductId] = useState('');
   const [licenseKey, setLicenseKey] = useState('');
@@ -1033,8 +1428,8 @@ export function LicensesPage() {
   const { isExpanded, toggle: toggleClient } = useExpandedGroups(!!licSearch || !!licStatus);
 
   const licensesQuery = useQuery({
-    queryKey: ['licenses', { includeVoided: showVoided }],
-    queryFn: async () => (await api.get<License[]>('/licenses', { params: showVoided ? { includeVoided: true } : undefined })).data,
+    queryKey: ['licenses', { includeVoided: true }],
+    queryFn: async () => (await api.get<License[]>('/licenses', { params: { includeVoided: true } })).data,
   });
 
   const clientsQuery = useQuery({
@@ -1173,7 +1568,7 @@ export function LicensesPage() {
   });
 
   const activeLicense = licensesQuery.data?.find((l) => l.id === activatingId);
-  const allLicenses = licensesQuery.data ?? [];
+  const allLicenses = (licensesQuery.data ?? []).filter((l) => showVoided || !l.voidedAt || !!l.transferredToNenposClientId);
 
   const filteredLicenses = allLicenses.filter((l) => {
     const q = licSearch.toLowerCase();
@@ -1220,6 +1615,13 @@ export function LicensesPage() {
     enabled: isAdminRole,
   });
 
+  const cloudQuery = useQuery({
+    queryKey: ['job-orders'],
+    queryFn: async () => (await api.get<JobOrder[]>('/job-orders')).data,
+    enabled: isAdminRole,
+  });
+  const cloudClientCount = new Set(buildCloudSubscriptions(cloudQuery.data ?? []).map((c) => c.clientId)).size;
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem', gap: '1rem', flexWrap: 'wrap' }}>
@@ -1238,6 +1640,7 @@ export function LicensesPage() {
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.75rem' }}>
           <TabButton label="Bhagoh Licenses" active={activeTab === 'licenses'} count={allLicenses.length} onClick={() => setActiveTab('licenses')} />
           <TabButton label="NENPOS Licenses" active={activeTab === 'nenpos'} count={nenposQuery.data?.length} onClick={() => setActiveTab('nenpos')} />
+          <TabButton label="Cloud Clients" active={activeTab === 'cloud'} count={cloudQuery.data ? cloudClientCount : undefined} onClick={() => setActiveTab('cloud')} />
         </div>
       )}
 
@@ -1806,6 +2209,7 @@ export function LicensesPage() {
 
       {/* ── NENPOS Clients Tab ── */}
       {activeTab === 'nenpos' && isAdminRole && <NenposClientsTab />}
+      {activeTab === 'cloud' && isAdminRole && <CloudClientsTab orders={cloudQuery.data ?? []} loading={cloudQuery.isLoading} failed={cloudQuery.isError} />}
     </div>
   );
 }

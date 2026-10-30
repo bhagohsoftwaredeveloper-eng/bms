@@ -185,7 +185,10 @@ Workflow:
 2. Fill it in and **Upload** the Excel/CSV file → `POST /api/nenpos-clients/upload`.
    Only the **first sheet** is read. Dates accept Excel serial numbers, `Date`
    values, or parseable date strings; unparseable values become `null`.
-3. The response reports `{ imported: n }`.
+3. The response reports `{ imported: n, updated: m }`.
+
+Entering a license key on a record that had none (or `TRIAL` / `CANCELLED`) — by
+upload or in the edit dialog — clears its Expiry Date and switches it to Full.
 
 Manual add/edit is also available via the **Add NENPOS Client** dialog.
 
