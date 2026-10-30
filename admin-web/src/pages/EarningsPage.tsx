@@ -73,17 +73,15 @@ export function EarningsPage() {
     allocateIncentive.mutate();
   };
 
-  // Build running balance (oldest → newest cumulative sum, then reverse back to newest-first)
-  const earningsWithBalance = earningsQuery.data
-    ? [...earningsQuery.data]
-        .reverse()
-        .reduce<(Earning & { runningBalance: number })[]>((acc, e) => {
-          const prev = acc.length > 0 ? acc[acc.length - 1].runningBalance : 0;
-          acc.push({ ...e, runningBalance: prev + Number(e.amount) });
-          return acc;
-        }, [])
-        .reverse()
-    : [];
+  // Each person's exact total incentives (every status, pending included), keyed by user.
+  const totalsByUser = new Map<string, { total: number; pending: number }>();
+  for (const e of earningsQuery.data ?? []) {
+    const key = e.userId;
+    const t = totalsByUser.get(key) ?? { total: 0, pending: 0 };
+    t.total += Number(e.amount);
+    if (e.status === 'PENDING') t.pending += Number(e.amount);
+    totalsByUser.set(key, t);
+  }
 
   // Use server-computed balance (APPROVED earnings minus in-flight withdrawals)
   const approvedBalance = balanceQuery.data?.availableBalance ?? 0;
@@ -196,13 +194,14 @@ export function EarningsPage() {
         </form>
       </Dialog>
 
-      <EarningsTable earningsWithBalance={earningsWithBalance} isAdmin={canManage} isLoading={earningsQuery.isLoading} isError={earningsQuery.isError} hasData={!!earningsQuery.data} onSetStatus={(id, action) => setStatus.mutate({ id, action })} />
+      <EarningsTable earnings={earningsQuery.data ?? []} totalsByUser={totalsByUser} isAdmin={canManage} isLoading={earningsQuery.isLoading} isError={earningsQuery.isError} hasData={!!earningsQuery.data} onSetStatus={(id, action) => setStatus.mutate({ id, action })} />
     </div>
   );
 }
 
-function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasData, onSetStatus }: {
-  earningsWithBalance: (Earning & { runningBalance: number })[];
+function EarningsTable({ earnings, totalsByUser, isAdmin, isLoading, isError, hasData, onSetStatus }: {
+  earnings: Earning[];
+  totalsByUser: Map<string, { total: number; pending: number }>;
   isAdmin: boolean;
   isLoading: boolean;
   isError: boolean;
@@ -213,7 +212,7 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
   const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const filtered = earningsWithBalance.filter((earning) =>
+  const filtered = earnings.filter((earning) =>
     matchesSearch(search, earning.user?.fullName, earning.job?.client?.businessName, earning.type)
     && (!status || earning.status === status)
     && inDateRange(earning.createdAt, from, to),
@@ -223,8 +222,8 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
     <div className="card">
         {isLoading && <p>Loading earnings…</p>}
         {isError && <p className="error-text">Failed to load earnings.</p>}
-        {hasData && earningsWithBalance.length === 0 && <p>No earnings recorded yet.</p>}
-        {earningsWithBalance.length > 0 && (
+        {hasData && earnings.length === 0 && <p>No earnings recorded yet.</p>}
+        {earnings.length > 0 && (
           <>
           <TableToolbar
             search={search}
@@ -250,7 +249,7 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
                 <th>Client</th>
                 <th>Type</th>
                 <th>Amount</th>
-                <th>Cumulative Earnings</th>
+                <th>Total Incentives</th>
                 <th>Status</th>
                 <th>Recorded</th>
                 {isAdmin && <th></th>}
@@ -278,7 +277,12 @@ function EarningsTable({ earningsWithBalance, isAdmin, isLoading, isError, hasDa
                   </td>
                   <td>₱{Number(earning.amount).toLocaleString()}</td>
                   <td style={{ fontWeight: 600, color: 'var(--success)' }}>
-                    ₱{earning.runningBalance.toLocaleString()}
+                    ₱{(totalsByUser.get(earning.userId)?.total ?? 0).toLocaleString()}
+                    {(totalsByUser.get(earning.userId)?.pending ?? 0) > 0 && (
+                      <div style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--warning)' }}>
+                        ₱{totalsByUser.get(earning.userId)!.pending.toLocaleString()} pending
+                      </div>
+                    )}
                   </td>
                   <td>
                     <StatusBadge status={earning.status} />
