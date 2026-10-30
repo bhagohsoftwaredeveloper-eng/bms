@@ -13,10 +13,7 @@ function fakeTx(existingEarning: unknown = null) {
 const baseCctv = {
   type: 'CCTV' as const,
   status: 'FINALIZED' as const,
-  salePrice: 120000,
-  cameraCount: 8,
-  cameraRate: 500,
-  laborPct: null,
+  laborAmount: 4000,
   jobId: 'job-1',
   job: { installerId: 'installer-1' },
 };
@@ -30,16 +27,9 @@ describe('ensureLaborEarning', () => {
     });
   });
 
-  it('computes signage labor from laborPct (default 20)', async () => {
+  it('uses the labor amount for signage orders too', async () => {
     const tx = fakeTx();
-    await ensureLaborEarning(tx, {
-      ...baseCctv,
-      type: 'SIGNAGE',
-      salePrice: 35000,
-      cameraCount: null,
-      cameraRate: null,
-      laborPct: null,
-    });
+    await ensureLaborEarning(tx, { ...baseCctv, type: 'SIGNAGE', laborAmount: 7000 });
     expect(tx.earning.create).toHaveBeenCalledWith({
       data: { userId: 'installer-1', jobId: 'job-1', amount: 7000, type: 'INSTALLATION' },
     });
@@ -79,16 +69,13 @@ describe('ensureLaborEarning', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('rejects finalize when labor computes to zero', async () => {
+  it('rejects finalize when no labor amount is entered', async () => {
     const tx = fakeTx();
-    await expect(
-      ensureLaborEarning(tx, { ...baseCctv, cameraCount: null, cameraRate: null }),
-    ).rejects.toThrow('Enter the number of cameras and rate per camera before finalizing.');
-    await expect(
-      ensureLaborEarning(tx, {
-        ...baseCctv, type: 'SIGNAGE', salePrice: 0, laborPct: 20,
-      }),
-    ).rejects.toThrow('Signage labor is zero — check the total price and labor % before finalizing.');
+    for (const laborAmount of [null, 0]) {
+      await expect(ensureLaborEarning(tx, { ...baseCctv, laborAmount })).rejects.toThrow(
+        'Enter the installer labor amount before finalizing.',
+      );
+    }
   });
 
   it('also ensures the earning for ON_GOING and COMPLETED statuses', async () => {

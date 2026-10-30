@@ -16,10 +16,7 @@ export interface LaborEarningTx {
 export interface LaborJobOrder {
   type: 'SOFTWARE' | 'CCTV' | 'SIGNAGE';
   status: string;
-  salePrice: unknown;
-  cameraCount: number | null;
-  cameraRate: unknown;
-  laborPct: unknown;
+  laborAmount: unknown;
   jobId: string | null;
   job: { installerId: string | null } | null;
 }
@@ -40,17 +37,10 @@ export async function ensureLaborEarning(tx: LaborEarningTx, jobOrder: LaborJobO
 
   const labor = computeLaborIncentive(
     jobOrder.type,
-    Number(jobOrder.salePrice),
-    jobOrder.cameraCount,
-    jobOrder.cameraRate === null ? null : Number(jobOrder.cameraRate),
-    jobOrder.laborPct === null ? null : Number(jobOrder.laborPct),
+    jobOrder.laborAmount === null || jobOrder.laborAmount === undefined ? null : Number(jobOrder.laborAmount),
   );
   if (labor <= 0) {
-    throw new BadRequestException(
-      jobOrder.type === 'CCTV'
-        ? 'Enter the number of cameras and rate per camera before finalizing.'
-        : 'Signage labor is zero — check the total price and labor % before finalizing.',
-    );
+    throw new BadRequestException('Enter the installer labor amount before finalizing.');
   }
 
   const existing = await tx.earning.findFirst({

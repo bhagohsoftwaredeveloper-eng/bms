@@ -57,8 +57,6 @@ export interface SoftwareProduct {
   productName: string;
   version: string;
   licenseType: LicenseType;
-  price: string;
-  maintenanceFee: string | null;
 }
 
 export type LicenseStatus = 'PENDING' | 'ACTIVATED' | 'EXPIRED' | 'SUSPENDED';
@@ -182,7 +180,6 @@ export interface Withdrawal {
   user?: AuthenticatedUser;
 }
 
-export type DiscountType = 'FIXED' | 'PERCENTAGE';
 export type JobOrderStatus = 'DRAFT' | 'FINALIZED' | 'ON_GOING' | 'COMPLETED' | 'CANCELLED';
 
 export type WarrantyTier = 'MAIN_SET' | 'ACCESSORY' | 'NONE';
@@ -193,7 +190,6 @@ export interface JobOrderItem {
   name: string;
   description: string | null;
   quantity: number;
-  unitPrice: string;
   inventoryItemId: string | null;
   unitId: string | null;
   warrantyTier: WarrantyTier;
@@ -210,9 +206,7 @@ export interface JobOrderUnit {
   label: string;
   sortOrder: number;
   productId: string | null;
-  price: string;
   cloudEnabled: boolean;
-  cloudMonthlyRate: string | null;
   cloudMonths: number | null;
 }
 
@@ -221,16 +215,12 @@ export interface JobOrder {
   jobId: string | null;
   clientId: string;
   productId: string | null;
-  salePrice: string;
-  cloudTotal: string;
-  discount: string;
-  discountType: DiscountType;
   remarks: string | null;
   status: JobOrderStatus;
   type: JobOrderType;
   cameraCount: number | null;
-  cameraRate: string | null;
-  laborPct: string | null;
+  /** CCTV / Signage: fixed installer labor pay (the installer's earning). */
+  laborAmount: string | null;
   docType: DocumentType;
   includeAgreement: boolean;
   includesBackofficeExtension: boolean;
@@ -243,30 +233,6 @@ export interface JobOrder {
   product?: SoftwareProduct;
   items: JobOrderItem[];
   units?: JobOrderUnit[];
-}
-
-export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'GCASH' | 'CHECK';
-
-export interface Payment {
-  id: string;
-  jobOrderId: string;
-  amount: string;
-  method: PaymentMethod;
-  referenceNo: string | null;
-  proofPhotoUrl: string | null;
-  paidAt: string;
-  recordedById: string;
-  voidedAt: string | null;
-  voidReason: string | null;
-  voidedById: string | null;
-  createdAt: string;
-}
-
-export interface JobOrderPayments {
-  grandTotal: number;
-  totalPaid: number;
-  balance: number;
-  payments: Payment[];
 }
 
 export interface AuditLog {
@@ -322,19 +288,6 @@ export interface BackupFile {
   filename: string;
   size: number;
   createdAt: string;
-}
-
-export interface FinancialSummary {
-  totalRevenue: number;
-  currentMonthRevenue: number;
-  prevMonthRevenue: number;
-  growth: number;
-  revenueByProduct: { label: string; value: number }[];
-}
-
-export interface RevenueTrend {
-  label: string;
-  value: number;
 }
 
 export interface KpiDefinitionRow {
@@ -499,7 +452,6 @@ export interface InventoryItem {
   name: string;
   description: string | null;
   barcode: string | null;
-  unitPrice: string; // Decimal serialized as string
   stockQty: number;
   lowStockAlert: number;
   sortOrder: number;
@@ -543,36 +495,4 @@ export interface StockMovement {
   note: string | null;
   userId: string | null;
   createdAt: string;
-}
-
-export interface CollectionsSummary {
-  from: string | null;
-  to: string | null;
-  totalCollected: number;
-  byMethod: { method: PaymentMethod; total: number; count: number }[];
-  byMonth: { month: string; total: number }[];
-  recentPayments: {
-    id: string;
-    jobOrderId: string;
-    amount: number;
-    method: PaymentMethod;
-    paidAt: string;
-    clientName: string;
-  }[];
-}
-
-export interface OutstandingRow {
-  jobOrderId: string;
-  clientId: string;
-  clientName: string;
-  grandTotal: number;
-  totalPaid: number;
-  balance: number;
-  lastPaymentAt: string | null;
-}
-
-export interface ClientPaymentHistory {
-  clientId: string;
-  clientName: string;
-  payments: (Payment & { jobOrderId: string })[];
 }

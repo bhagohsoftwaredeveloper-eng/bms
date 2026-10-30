@@ -26,7 +26,6 @@ import { JobsModule } from './jobs.module';
 import { KpisModule } from './kpis.module';
 import { LicensesModule } from './licenses.module';
 import { NotificationsModule } from './notifications.module';
-import { PaymentsModule } from './payments.module';
 import { PrismaModule } from './prisma.module';
 import { SoftwareProductsModule } from './software-products.module';
 import { DownloadLeadsModule } from './download-leads.module';
@@ -68,7 +67,6 @@ import { WithdrawalsModule } from './withdrawals.module';
     LicensesModule,
     JobsModule,
     JobOrdersModule,
-    PaymentsModule,
     InventoryModule,
     ItemCategoriesModule,
     ItemPackagesModule,

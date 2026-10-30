@@ -1,6 +1,9 @@
 # 13 — Financial Reports & Analytics
 
-Route: `/financial-reports` · Roles: `SUPER_ADMIN`, `ADMIN_STAFF`, `SALES_STAFF`
+Route: **Reports → Financial Reports** (`/reports/financial`) · Roles:
+`SUPER_ADMIN`, `ADMIN_STAFF`, `SALES_STAFF`
+
+The `/financial-reports` route remains as a redirect for existing bookmarks.
 
 All four endpoints live under `/api/reports/financial` and share the same role
 guard applied at the controller level.
@@ -75,6 +78,19 @@ Empty state: **"No payments for this client."**
 
 **Expected:** the CSV row count matches the on-screen table row count for the same
 filter.
+
+## Installer report
+
+Route: **Reports → Installer Report** (`/reports/installers`) · Roles:
+`SUPER_ADMIN`, `ADMIN_STAFF`
+
+Search by installer name and select an installer to view their report. The
+details show their unique assigned-client count, assigned installation jobs and
+statuses, and earnings grouped by pending/approved/paid status and
+installation/activation/bonus/commission type. Legacy jobs that have only the
+primary installer assignment are included. Earnings totals include all
+recorded statuses. Use **Download PDF** to save the selected installer report
+or **Print** to print it directly.
 
 ## The page
 

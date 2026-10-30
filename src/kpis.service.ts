@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { EarningStatus, EarningType, IncentiveStatus, JobOrderStatus, UserRole } from '@prisma/client';
+import { EarningStatus, EarningType, IncentiveStatus, UserRole } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 import { PrismaService } from './prisma.service';
 import { WithdrawalsService } from './withdrawals.service';
@@ -460,61 +460,6 @@ export class KpisService implements OnModuleInit {
     const incentive = await this.prisma.incentive.update({ where: { id }, data: { status: IncentiveStatus.PAID } });
     await this.syncIncentiveEarning(incentive);
     return incentive;
-  }
-
-  // ── Financial summary (admin dashboard) ───────────────────────────────────
-
-  async getFinancialSummary() {
-    const jobOrders = await this.prisma.jobOrder.findMany({
-      where: { status: JobOrderStatus.FINALIZED },
-      include: { product: true },
-    });
-
-    const totalRevenue = jobOrders.reduce((sum, o) => sum + Number(o.salePrice), 0);
-
-    const now = new Date();
-    const cm = now.getMonth();
-    const cy = now.getFullYear();
-    const pm = cm === 0 ? 11 : cm - 1;
-    const py = cm === 0 ? cy - 1 : cy;
-
-    const filter = (m: number, y: number) =>
-      jobOrders.filter((o) => { const d = new Date(o.createdAt); return d.getMonth() === m && d.getFullYear() === y; });
-
-    const currentMonthRevenue = filter(cm, cy).reduce((s, o) => s + Number(o.salePrice), 0);
-    const prevMonthRevenue = filter(pm, py).reduce((s, o) => s + Number(o.salePrice), 0);
-    const growth = prevMonthRevenue === 0 ? (currentMonthRevenue > 0 ? 100 : 0) : ((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100;
-
-    const byProduct = jobOrders.reduce((acc, o) => {
-      const name = o.product?.productName || 'Other';
-      acc[name] = (acc[name] || 0) + Number(o.salePrice);
-      return acc;
-    }, {} as Record<string, number>);
-
-    return {
-      totalRevenue,
-      currentMonthRevenue,
-      prevMonthRevenue,
-      growth,
-      revenueByProduct: Object.entries(byProduct).map(([label, value]) => ({ label, value })),
-    };
-  }
-
-  async getRevenueTrend() {
-    const now = new Date();
-    const last6Months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      return { month: d.getMonth(), year: d.getFullYear(), label: d.toLocaleString('default', { month: 'short' }) };
-    }).reverse();
-
-    const jobOrders = await this.prisma.jobOrder.findMany({ where: { status: JobOrderStatus.FINALIZED } });
-
-    return last6Months.map((m) => ({
-      label: m.label,
-      value: jobOrders
-        .filter((o) => { const d = new Date(o.createdAt); return d.getMonth() === m.month && d.getFullYear() === m.year; })
-        .reduce((s, o) => s + Number(o.salePrice), 0),
-    }));
   }
 
   // ── Designer KPI: external TMS Pro integration ─────────────────────────────

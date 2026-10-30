@@ -28,19 +28,16 @@ async function inlineImages(root: HTMLElement): Promise<void> {
   );
 }
 
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../lib/api';
 import { Dialog } from '../components/Dialog';
-import { JobOrderPayments } from '../components/JobOrderPayments';
 import { useAuthStore } from '../lib/auth-store';
-import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, DiscountType, InventoryItem, ItemPackage, Job, JobOrder, JobOrderItem, JobOrderPayments as JobOrderPaymentsSummary, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
-import { DOC_META, DOC_TYPES } from '../components/print/doc-types';
-import type { DocumentType as DocType } from '../lib/types';
+import type { AgreementVersion, AuthenticatedUser, Client, CompanyProfile, InventoryItem, ItemPackage, Job, JobOrder, JobOrderItem, JobOrderStatus, JobOrderType, SoftwareProduct, WarrantyTier } from '../lib/types';
 import { PrintTemplate, type LineItem } from '../components/print/PrintTemplate';
 import {
-  GENERAL_KEY, MAX_PREFILL_COMPUTERS, applyProduct, blankUnit, computeTotals, detachItems,
-  fromSavedUnits, groupItems, legacyUnit, sumUnits, unitCloudTotal, unitsForCount, type UnitDraft,
+  GENERAL_KEY, MAX_PREFILL_COMPUTERS, blankUnit, detachItems,
+  fromSavedUnits, groupItems, legacyUnit, unitsForCount, type UnitDraft,
 } from '../lib/job-order-units';
 import { ServiceAgreement } from '../components/print/ServiceAgreement';
 
@@ -184,23 +181,19 @@ function generateClientCode(): string {
 const WIZARD_STEPS = [
   { num: 1, label: 'Client & Project' },
   { num: 2, label: 'Materials / Package' },
-  { num: 3, label: 'Payments' },
 ] as const;
 
-function StepIndicator({ step, onStep, paymentsEnabled }: { step: number; onStep: (n: 1 | 2 | 3) => void; paymentsEnabled: boolean }) {
+function StepIndicator({ step, onStep }: { step: number; onStep: (n: 1 | 2) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
       {WIZARD_STEPS.map((s, i) => {
-        const disabled = s.num === 3 && !paymentsEnabled;
         const active = step === s.num;
         return (
           <div key={s.num} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             {i > 0 && <div style={{ width: 24, height: 1, background: 'var(--border)' }} />}
             <button
               type="button"
-              disabled={disabled}
-              onClick={() => onStep(s.num as 1 | 2 | 3)}
-              title={disabled ? 'Save the job order to record payments' : undefined}
+              onClick={() => onStep(s.num as 1 | 2)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -208,8 +201,7 @@ function StepIndicator({ step, onStep, paymentsEnabled }: { step: number; onStep
                 background: 'none',
                 border: 'none',
                 padding: 0,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.45 : 1,
+                cursor: 'pointer',
               }}
             >
               <span
@@ -251,7 +243,6 @@ function fromSaved(item: JobOrderItem): LineItem {
     name: item.name,
     description: item.description ?? '',
     quantity: item.quantity,
-    unitPrice: Number(item.unitPrice),
     warrantyTier: item.warrantyTier ?? 'ACCESSORY',
     unitKey: item.unitId ?? undefined,
   };
@@ -293,16 +284,7 @@ export function JobOrderPage() {
     retry: false,
   });
 
-  // ── Fetch payments summary (for the printed down payment / balance lines) ──
-  const paymentsQuery = useQuery({
-    queryKey: ['job-order-payments', jobOrderQuery.data?.id],
-    queryFn: async () => (await api.get<JobOrderPaymentsSummary>(`/job-orders/${jobOrderQuery.data!.id}/payments`)).data,
-    enabled: !!jobOrderQuery.data?.id,
-  });
-
   const role = useAuthStore((s) => s.user?.role);
-  // Encoders only encode the order; pricing stays hidden from them.
-  const hidePrices = role === 'ENCODER';
 
   // ── Fetch the parent record ──
   const jobQuery = useQuery({
@@ -361,23 +343,18 @@ export function JobOrderPage() {
   const [clientId, setClientId] = useState('');
   const [units, setUnits] = useState<UnitDraft[]>(() => [blankUnit(0)]);
   const [activeUnitKey, setActiveUnitKey] = useState('');
-  const [salePrice, setSalePrice] = useState(0);
-  const [discount, setDiscount] = useState(0);
-  const [discountType, setDiscountType] = useState<DiscountType>('FIXED');
   const [remarks, setRemarks] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
   const [joType, setJoType] = useState<JobOrderType>('SOFTWARE');
   const [cameraCount, setCameraCount] = useState(0);
-  const [cameraRate, setCameraRate] = useState(0);
-  const [laborPct, setLaborPct] = useState(20);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' as WarrantyTier });
+  const [laborAmount, setLaborAmount] = useState(0);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [customForm, setCustomForm] = useState({ name: '', description: '', quantity: 1, warrantyTier: 'ACCESSORY' as WarrantyTier });
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [includeAgreement, setIncludeAgreement] = useState(false);
   const [includesBackofficeExtension, setIncludesBackofficeExtension] = useState(false);
 
   const isSoftware = joType === 'SOFTWARE';
-  const unitSums = sumUnits(units);
   // Where newly added items/packages land: the chosen computer, or General.
   const addTarget = !isSoftware || activeUnitKey === GENERAL_KEY
     ? undefined
@@ -408,11 +385,6 @@ export function JobOrderPage() {
     });
   };
 
-  const pkgPerUnitTotal = selectedPackage
-    ? selectedPackage.items
-        .filter((c) => !excludedComponents.has(c.inventoryItemId))
-        .reduce((s, c) => s + c.quantity * Number(c.inventoryItem?.unitPrice ?? 0), 0)
-    : 0;
   const pkgIncludedCount = selectedPackage
     ? selectedPackage.items.length - excludedComponents.size
     : 0;
@@ -427,7 +399,6 @@ export function JobOrderPage() {
         name: c.inventoryItem?.name ?? 'Item',
         description: c.inventoryItem?.description ?? '',
         quantity: c.quantity * Math.max(1, qty),
-        unitPrice: Number(c.inventoryItem?.unitPrice ?? 0),
         warrantyTier: 'ACCESSORY',
         unitKey: addTarget,
       }));
@@ -454,22 +425,17 @@ export function JobOrderPage() {
     const jo = jobOrderQuery.data;
     if (!jo) return;
     setClientId(jo.clientId);
-    setSalePrice(Number(jo.salePrice));
     setUnits(
       jo.units && jo.units.length > 0
         ? fromSavedUnits(jo.units)
-        : [legacyUnit(jo.productId ?? '', Number(jo.salePrice))],
+        : [legacyUnit(jo.productId ?? '')],
     );
-    setDiscount(Number(jo.discount));
-    setDiscountType(jo.discountType);
     setRemarks(jo.remarks ?? '');
     setItems((jo.items ?? []).map(fromSaved));
     setActiveUnitKey('');
     setJoType(jo.type ?? 'SOFTWARE');
     setCameraCount(jo.cameraCount ?? 0);
-    setCameraRate(jo.cameraRate != null ? Number(jo.cameraRate) : 0);
-    setLaborPct(jo.laborPct != null ? Number(jo.laborPct) : 20);
-    setDocType(jo.docType ?? 'JOB_ORDER');
+    setLaborAmount(jo.laborAmount != null ? Number(jo.laborAmount) : 0);
     setIncludeAgreement(jo.includeAgreement ?? false);
     setIncludesBackofficeExtension(jo.includesBackofficeExtension ?? false);
   }, [jobOrderQuery.data]);
@@ -484,7 +450,7 @@ export function JobOrderPage() {
     if (job.clientId) setClientId(job.clientId);
     const licensedProduct = productsQuery.data?.find((p) => p.id === job.license?.productId);
     if (licensedProduct) {
-      setUnits((prev) => (prev[0] && !prev[0].productId ? [applyProduct(prev[0], licensedProduct), ...prev.slice(1)] : prev));
+      setUnits((prev) => (prev[0] && !prev[0].productId ? [{ ...prev[0], productId: licensedProduct.id }, ...prev.slice(1)] : prev));
     }
   }, [jobQuery.data, jobOrderQuery.data, jobOrderQuery.isPending, jobOrderQuery.isFetching, productsQuery.data]);
 
@@ -509,41 +475,33 @@ export function JobOrderPage() {
 
   // ── Upsert mutation ──
   const upsert = useMutation({
-    mutationFn: async ({ status, doc }: { status: JobOrderStatus; doc?: DocType }) =>
+    mutationFn: async ({ status }: { status: JobOrderStatus }) =>
       (
         await api.post<JobOrder>('/job-orders', {
           id: standalone ? (jobOrderQuery.data?.id ?? standaloneId) : undefined,
           jobId: standalone ? undefined : jobId,
           clientId,
           productId: isSoftware ? units[0]?.productId || undefined : undefined,
-          salePrice: effectiveSalePrice,
           units: isSoftware
             ? units.map((u) => ({
                 key: u._key,
                 label: u.label,
                 productId: u.productId || undefined,
-                price: u.price,
                 cloudEnabled: u.cloudEnabled,
-                cloudMonthlyRate: u.cloudEnabled ? u.cloudMonthlyRate : undefined,
                 cloudMonths: u.cloudEnabled ? u.cloudMonths : undefined,
               }))
             : undefined,
-          discount,
-          discountType,
           remarks: remarks || undefined,
           status,
           type: joType,
           cameraCount: joType === 'CCTV' && cameraCount > 0 ? cameraCount : undefined,
-          cameraRate: joType === 'CCTV' ? cameraRate : undefined,
-          laborPct: joType === 'SIGNAGE' ? laborPct : undefined,
-          docType: doc ?? docType,
+          laborAmount: joType !== 'SOFTWARE' ? laborAmount : undefined,
           includeAgreement,
           includesBackofficeExtension: joType === 'SOFTWARE' ? includesBackofficeExtension : undefined,
-          items: items.map(({ name, description, quantity, unitPrice, inventoryItemId, warrantyTier, unitKey }) => ({
+          items: items.map(({ name, description, quantity, inventoryItemId, warrantyTier, unitKey }) => ({
             name,
             description: description || undefined,
             quantity,
-            unitPrice,
             inventoryItemId: inventoryItemId ?? undefined,
             warrantyTier,
             unitKey: isSoftware && unitKey && units.some((u) => u._key === unitKey) ? unitKey : undefined,
@@ -629,7 +587,6 @@ export function JobOrderPage() {
         name: item.name,
         description: item.description ?? '',
         quantity: 1,
-        unitPrice: Number(item.unitPrice),
         warrantyTier: 'ACCESSORY',
         unitKey: addTarget,
       },
@@ -653,7 +610,7 @@ export function JobOrderPage() {
   const addCustom = (e: FormEvent) => {
     e.preventDefault();
     setItems((prev) => [...prev, { _key: newKey(), ...customForm, unitKey: addTarget }]);
-    setCustomForm({ name: '', description: '', quantity: 1, unitPrice: 0, warrantyTier: 'ACCESSORY' });
+    setCustomForm({ name: '', description: '', quantity: 1, warrantyTier: 'ACCESSORY' });
     setShowCustomForm(false);
   };
 
@@ -664,12 +621,6 @@ export function JobOrderPage() {
   const removeItem = (key: string) => {
     setItems((prev) => prev.filter((i) => i._key !== key));
   };
-
-  const effectiveSalePrice = isSoftware ? unitSums.systemsTotal : salePrice;
-  const cloudTotal = isSoftware ? unitSums.cloudTotal : 0;
-  const { materialsTotal, subtotal, discountAmt, grandTotal } = computeTotals(
-    effectiveSalePrice, discount, discountType, items, cloudTotal,
-  );
 
   const client = clientsQuery.data?.find((c) => c.id === clientId);
   const jo = jobOrderQuery.data;
@@ -699,8 +650,7 @@ export function JobOrderPage() {
 
   // A printed order reproduces the version it was pinned to; an unprinted one
   // follows the current template.
-  // Encoders can't see pricing, so their print is the letterhead + agreement only.
-  const printAgreement = includeAgreement || hidePrices;
+  const printAgreement = includeAgreement;
   const agreementSections =
     jo?.agreementVersion?.sections ?? agreementTemplateQuery.data?.sections ?? [];
 
@@ -708,13 +658,7 @@ export function JobOrderPage() {
     ? groupItems(items, units)
     : [{ key: 'all', unit: null as UnitDraft | null, items }];
 
-  // Payments require a saved order; fall back to step 2 if the order vanishes.
-  const effectiveStep = step === 3 && !jo?.id ? 2 : step;
-
-  const laborIncentive =
-    joType === 'CCTV' ? cameraCount * cameraRate
-    : joType === 'SIGNAGE' ? (salePrice * laborPct) / 100
-    : 0;
+  const effectiveStep = step;
   const installerName = parent?.installer?.fullName;
 
   /**
@@ -736,23 +680,10 @@ export function JobOrderPage() {
     // Save first so the print reflects the latest state
     const saved = await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
     await pinAgreement(saved.id);
-    // Payments (down payment / balance) are fetched separately from the job
-    // order itself — make sure that request has landed before the browser
-    // snapshots the DOM for print.
-    if (jobOrderQuery.data?.id) await paymentsQuery.refetch();
     window.print();
   };
 
   const [isDownloading, setIsDownloading] = useState(false);
-  const [searchParams] = useSearchParams();
-  const docParam = searchParams.get('doc');
-  // New JOs inherit the document type from the list page's active tab.
-  // Standalone orders default to Quotation — their usual reason to exist.
-  const [docType, setDocType] = useState<DocType>(
-    DOC_TYPES.some((d) => d.value === docParam) ? (docParam as DocType) : standalone ? 'QUOTATION' : 'JOB_ORDER',
-  );
-  const [showMoveDialog, setShowMoveDialog] = useState(false);
-  const [moveTarget, setMoveTarget] = useState<DocType>('JOB_ORDER');
 
   const handleDownload = async () => {
     const element = document.getElementById('job-order-print');
@@ -761,9 +692,8 @@ export function JobOrderPage() {
       const saved = await upsert.mutateAsync({ status: jo?.status ?? 'DRAFT' });
       await pinAgreement(saved.id);
     }
-    if (jobOrderQuery.data?.id) await paymentsQuery.refetch();
     setIsDownloading(true);
-    const filename = `${DOC_META[docType].filePrefix}-${jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}.pdf`;
+    const filename = `JO-${jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}.pdf`;
     element.style.display = 'block';
     try {
       await inlineImages(element);
@@ -837,19 +767,11 @@ export function JobOrderPage() {
       {/* ── Print-only template ── */}
       <div id="job-order-print" style={{ display: 'none' }}>
         <PrintTemplate
-          docType={docType}
           jobId={jobId ?? jo?.id ?? ''}
           joNumber={jo?.id.slice(0, 8).toUpperCase() ?? 'NEW'}
           client={client}
-          salePrice={effectiveSalePrice}
           units={isSoftware ? units : undefined}
           products={productsQuery.data}
-          subtotal={subtotal}
-          discountAmt={discountAmt}
-          materialsTotal={materialsTotal}
-          grandTotal={grandTotal}
-          amountPaid={paymentsQuery.data?.totalPaid}
-          balanceDue={paymentsQuery.data?.balance}
           items={items}
           remarks={remarks}
           status={jo?.status ?? 'DRAFT'}
@@ -861,7 +783,6 @@ export function JobOrderPage() {
           companyEmail={companyProfileQuery.data?.email ?? undefined}
           companyWebsite={companyProfileQuery.data?.website ?? undefined}
           companyTin={companyProfileQuery.data?.tin ?? undefined}
-          headerOnly={hidePrices}
         />
         {printAgreement && agreementSections.length > 0 && (
           <ServiceAgreement
@@ -899,16 +820,6 @@ export function JobOrderPage() {
             <h1 style={{ margin: 0 }}>Project Job Order</h1>
             <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               {jo ? `JO-${jo.id.slice(0, 8).toUpperCase()} · ${jo.status}` : 'New job order'}
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: 999, background: 'var(--accent-light)', color: 'var(--accent)' }}>
-                {DOC_META[docType].label}
-              </span>
-              <button
-                type="button"
-                onClick={() => { setMoveTarget(docType); setShowMoveDialog(true); }}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.78rem', padding: 0, textDecoration: 'underline' }}
-              >
-                Change
-              </button>
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -938,7 +849,6 @@ export function JobOrderPage() {
             >
               Finalize
             </button>
-            {!hidePrices && (
             <label
               style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}
               title="Appends the Service Level Agreement pages to the printed document"
@@ -953,7 +863,6 @@ export function JobOrderPage() {
                 <span style={{ color: 'var(--danger)' }}>— no materials, warranty lists will be empty</span>
               )}
             </label>
-            )}
             <button
               type="button"
               className="btn btn-secondary"
@@ -1019,7 +928,7 @@ export function JobOrderPage() {
         }}>
           {/* ── Left column: wizard ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', minWidth: 0 }}>
-            <StepIndicator step={effectiveStep} onStep={setStep} paymentsEnabled={!!jo?.id} />
+            <StepIndicator step={effectiveStep} onStep={setStep} />
 
             {/* Step 1: Client & Project */}
             {effectiveStep === 1 && (
@@ -1052,33 +961,22 @@ export function JobOrderPage() {
                       <input id="jo-camera-count" type="number" min={0} value={cameraCount}
                         onChange={(e) => setCameraCount(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
                     </div>
-                    <div className="field">
-                      <label htmlFor="jo-camera-rate">Rate per Camera (₱)</label>
-                      <input id="jo-camera-rate" type="number" min={0} step="0.01" value={cameraRate}
-                        onChange={(e) => setCameraRate(Number(e.target.value) || 0)} />
-                    </div>
                   </>
                 )}
-                {joType === 'SIGNAGE' && (
+                {!isSoftware && (
                   <div className="field">
-                    <label htmlFor="jo-labor-pct">Labor %</label>
-                    <input id="jo-labor-pct" type="number" min={0} max={100} step="0.01" value={laborPct}
-                      onChange={(e) => setLaborPct(Number(e.target.value) || 0)} />
-                  </div>
-                )}
-                {!isSoftware && !hidePrices && (
-                  <div className="field">
-                    <label htmlFor="jo-sale-price">
-                      {joType === 'SIGNAGE' ? 'Total Signage Price (₱)' : 'Contract Price (₱)'}
-                    </label>
+                    <label htmlFor="jo-labor-amount">Installer labor amount (₱)</label>
                     <input
-                      id="jo-sale-price"
+                      id="jo-labor-amount"
                       type="number"
                       min={0}
                       step="0.01"
-                      value={salePrice}
-                      onChange={(e) => setSalePrice(Number(e.target.value))}
+                      value={laborAmount}
+                      onChange={(e) => setLaborAmount(Number(e.target.value) || 0)}
                     />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      What the installer earns for this job. Required to finalize.
+                    </span>
                   </div>
                 )}
               </div>
@@ -1090,7 +988,6 @@ export function JobOrderPage() {
                     </p>
                   )}
                   {units.map((unit, index) => {
-                    const unitProduct = productsQuery.data?.find((p) => p.id === unit.productId);
                     const patch = (p: Partial<UnitDraft>) =>
                       setUnits((prev) => prev.map((u) => (u._key === unit._key ? { ...u, ...p } : u)));
                     return (
@@ -1106,15 +1003,7 @@ export function JobOrderPage() {
                               id={`unit-product-${unit._key}`}
                               required
                               value={unit.productId}
-                              onChange={(e) =>
-                                setUnits((prev) =>
-                                  prev.map((u) =>
-                                    u._key === unit._key
-                                      ? applyProduct(u, productsQuery.data?.find((p) => p.id === e.target.value))
-                                      : u,
-                                  ),
-                                )
-                              }
+                              onChange={(e) => patch({ productId: e.target.value })}
                             >
                               <option value="">Select product…</option>
                               {productsQuery.data?.map((p) => (
@@ -1122,26 +1011,8 @@ export function JobOrderPage() {
                               ))}
                             </select>
                           </div>
-                          {!hidePrices && (
-                            <div className="field">
-                              <label htmlFor={`unit-price-${unit._key}`}>Sale Price (₱)</label>
-                              <input
-                                id={`unit-price-${unit._key}`}
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                value={unit.price}
-                                onChange={(e) => patch({ price: Number(e.target.value) || 0 })}
-                              />
-                              {unitProduct && (
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  List price: ₱{Number(unitProduct.price).toLocaleString()}
-                                </span>
-                              )}
-                            </div>
-                          )}
                           <div className="field">
-                            <label htmlFor={`unit-cloud-${unit._key}`}>Cloud Subscription (Monthly)</label>
+                            <label htmlFor={`unit-cloud-${unit._key}`}>Cloud Subscription</label>
                             {/* Inline overrides: `.field label`/`.field input` would otherwise uppercase the text and stretch the checkbox to full width. */}
                             <label
                               style={{
@@ -1161,26 +1032,17 @@ export function JobOrderPage() {
                             </label>
                             {unit.cloudEnabled && (
                               <>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: '0.5rem', marginTop: '0.35rem' }}>
-                                  <input
-                                    aria-label="Monthly rate"
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    value={unit.cloudMonthlyRate}
-                                    onChange={(e) => patch({ cloudMonthlyRate: Number(e.target.value) || 0 })}
-                                  />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.35rem' }}>
                                   <input
                                     aria-label="Months"
                                     type="number"
                                     min={1}
+                                    style={{ width: 90 }}
                                     value={unit.cloudMonths}
                                     onChange={(e) => patch({ cloudMonths: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
                                   />
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>months</span>
                                 </div>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  ₱{unit.cloudMonthlyRate.toLocaleString()}/mo × {unit.cloudMonths} = ₱{unitCloudTotal(unit).toLocaleString()}
-                                </span>
                               </>
                             )}
                           </div>
@@ -1314,9 +1176,6 @@ export function JobOrderPage() {
                       >
                         <span className="isr-name">📦 {p.name} — package ({p.items.length} item{p.items.length === 1 ? '' : 's'})</span>
                         {p.description && <span className="isr-desc">{p.description}</span>}
-                        <span className="isr-qty">
-                          ₱{p.items.reduce((s, c) => s + c.quantity * Number(c.inventoryItem?.unitPrice ?? 0), 0).toLocaleString()} total
-                        </span>
                       </button>
                     ))}
                   </div>
@@ -1357,11 +1216,6 @@ export function JobOrderPage() {
                     {isSoftware && (
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0.25rem 0' }}>
                         {group.unit ? group.unit.label || 'Computer' : 'General'}
-                        {!hidePrices && (
-                          <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
-                            {' '}— ₱{group.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toLocaleString()}
-                          </span>
-                        )}
                       </div>
                     )}
                 <table>
@@ -1372,8 +1226,6 @@ export function JobOrderPage() {
                       <th>Description</th>
                       {includeAgreement && <th style={{ width: 130 }}>Warranty</th>}
                       <th style={{ width: 60 }}>Qty</th>
-                      {!hidePrices && <th style={{ width: 120 }}>Price</th>}
-                      {!hidePrices && <th style={{ width: 100 }}>Total</th>}
                       <th style={{ width: 36 }}></th>
                     </tr>
                   </thead>
@@ -1417,23 +1269,6 @@ export function JobOrderPage() {
                             onChange={(e) => updateItem(item._key, { quantity: Number(e.target.value) || 1 })}
                           />
                         </td>
-                        {!hidePrices && (
-                          <>
-                            <td>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                value={item.unitPrice}
-                                style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'right', fontFamily: 'inherit', fontSize: '0.9rem' }}
-                                onChange={(e) => updateItem(item._key, { unitPrice: Number(e.target.value) })}
-                              />
-                            </td>
-                            <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                              ₱{(item.quantity * item.unitPrice).toLocaleString()}
-                            </td>
-                          </>
-                        )}
                         <td>
                           <button
                             type="button"
@@ -1512,19 +1347,6 @@ export function JobOrderPage() {
                         onChange={(e) => setCustomForm((f) => ({ ...f, quantity: Number(e.target.value) || 1 }))}
                       />
                     </div>
-                    {!hidePrices && (
-                      <div className="field">
-                        <label htmlFor="custom-item-unit-price">Unit Price (₱)</label>
-                        <input
-                          id="custom-item-unit-price"
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={customForm.unitPrice}
-                          onChange={(e) => setCustomForm((f) => ({ ...f, unitPrice: Number(e.target.value) || 0 }))}
-                        />
-                      </div>
-                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button type="submit" className="btn btn-primary" style={{ fontSize: '0.85rem' }}>
@@ -1546,124 +1368,35 @@ export function JobOrderPage() {
                 <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>
                   ← Back
                 </button>
-                {jo?.id ? (
-                  <button type="button" className="btn btn-primary" onClick={() => setStep(3)}>
-                    Next →
-                  </button>
-                ) : (
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Save the job order to record payments.
-                  </span>
-                )}
               </div>
             </section>
             )}
 
-            {/* Step 3: Payments */}
-            {effectiveStep === 3 && jo?.id && (
-              <>
-                {hidePrices ? (
-                  <div className="card" style={{ color: 'var(--text-muted)' }}>
-                    Finara Accounting ERP handles this.
-                  </div>
-                ) : (
-                  <JobOrderPayments jobOrderId={jo.id} canVoid={role === 'SUPER_ADMIN' || role === 'ADMIN_STAFF'} />
-                )}
-                <div>
-                  <button type="button" className="btn btn-secondary" onClick={() => setStep(2)}>
-                    ← Back
-                  </button>
-                </div>
-              </>
-            )}
           </div>
 
           {/* ── Right column: Summary ── */}
           <aside style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {!hidePrices && (
-              <div className="card">
-                <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Order Summary</h2>
-                <table style={{ fontSize: '0.9rem', tableLayout: 'fixed' }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>
-                        {joType === 'SOFTWARE'
-                          ? `System / Software (${units.length} computer${units.length === 1 ? '' : 's'})`
-                          : joType === 'CCTV' ? 'CCTV Contract' : 'Signage'}
-                      </td>
-                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{effectiveSalePrice.toLocaleString()}</td>
-                    </tr>
-                    {items.length > 0 && (
-                      <tr>
-                        <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Materials ({items.length} item{items.length > 1 ? 's' : ''})</td>
-                        <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{materialsTotal.toLocaleString()}</td>
-                      </tr>
-                    )}
-                    {cloudTotal > 0 && (
-                      <tr>
-                        <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Cloud subscription</td>
-                        <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{cloudTotal.toLocaleString()}</td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td style={{ color: 'var(--text-muted)', paddingLeft: 0, borderBottom: 'none' }}>Subtotal</td>
-                      <td style={{ textAlign: 'right', paddingRight: 0, borderBottom: 'none' }}>₱{subtotal.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ paddingLeft: 0, paddingRight: 0, borderBottom: 'none' }}>
-                        <div className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
-                          <label htmlFor="jo-discount" style={{ color: 'var(--success)', flexShrink: 0 }}>
-                            Discount
-                          </label>
-                          <input
-                            id="jo-discount"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            style={{ flex: 1, minWidth: 0, width: 'auto', textAlign: 'right', padding: '0.45rem 0.6rem' }}
-                            value={discount}
-                            onChange={(e) => setDiscount(Number(e.target.value))}
-                          />
-                          <select
-                            value={discountType}
-                            style={{ width: 68, flexShrink: 0, padding: '0.45rem 0.6rem' }}
-                            onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                          >
-                            <option value="FIXED">₱</option>
-                            <option value="PERCENTAGE">%</option>
-                          </select>
-                        </div>
-                        {discount > 0 && (
-                          <div style={{ textAlign: 'right', color: 'var(--success)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                            −₱{discountAmt.toLocaleString()}{discountType === 'PERCENTAGE' ? ` (${discount}%)` : ''}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ borderBottom: '2px solid var(--border)', padding: 0 }} />
-                    </tr>
-                    <tr>
-                      <td style={{ fontWeight: 700, paddingLeft: 0 }}>Grand Total</td>
-                      <td style={{ fontWeight: 700, fontSize: '1.2rem', textAlign: 'right', paddingRight: 0, color: 'var(--accent)' }}>
-                        ₱{grandTotal.toLocaleString()}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+            <div className="card">
+              <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Order Summary</h2>
+              <div style={{ fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {joType === 'SOFTWARE' ? 'Computers: ' : joType === 'CCTV' ? 'Cameras: ' : 'Project: '}
+                  </span>
+                  <strong>{joType === 'SOFTWARE' ? units.length : joType === 'CCTV' ? cameraCount : 'Signage installation'}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Materials: </span>
+                  <strong>{items.length} item{items.length === 1 ? '' : 's'}</strong>
+                </div>
               </div>
-            )}
+            </div>
 
             {joType !== 'SOFTWARE' && (
               <div className="card">
                 <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Installer Labor</h2>
                 <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--accent)' }}>
-                  ₱{laborIncentive.toLocaleString()}
-                </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  {joType === 'CCTV'
-                    ? `${cameraCount} camera${cameraCount === 1 ? '' : 's'} × ₱${cameraRate.toLocaleString()}`
-                    : `${laborPct}% of ₱${salePrice.toLocaleString()}`}
+                  ₱{laborAmount.toLocaleString()}
                 </div>
                 <div style={{ fontSize: '0.8rem', marginTop: '0.6rem' }}>
                   {installerName ? (
@@ -1675,7 +1408,7 @@ export function JobOrderPage() {
                   )}
                 </div>
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 0 }}>
-                  Internal cost — not shown on the client invoice. A pending earning is created for the installer when this JO is finalized.
+                  Internal only — not shown on the printed job order. A pending earning is created for the installer when this JO is finalized.
                 </p>
               </div>
             )}
@@ -1699,7 +1432,7 @@ export function JobOrderPage() {
         maxWidth={520}
       >
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 0 }}>
-          Expands the package into one line per component, priced from the current inventory catalog. Untick any
+          Expands the package into one line per component. Untick any
           component you don't need.
         </p>
         <div className="field">
@@ -1752,21 +1485,12 @@ export function JobOrderPage() {
                         </span>
                       )}
                     </span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      ₱{(c.quantity * Number(c.inventoryItem?.unitPrice ?? 0)).toLocaleString()}
-                    </span>
                   </label>
                 );
               })}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                {pkgIncludedCount} of {selectedPackage.items.length} components
-              </span>
-              <strong>
-                Total: ₱{(pkgPerUnitTotal * packageQty).toLocaleString()}
-                {packageQty > 1 ? ` (${packageQty}×)` : ''}
-              </strong>
+            <div style={{ fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-muted)' }}>
+              {pkgIncludedCount} of {selectedPackage.items.length} components
             </div>
           </>
         )}
@@ -1786,50 +1510,6 @@ export function JobOrderPage() {
             Insert {selectedPackage ? `(${pkgIncludedCount} item${pkgIncludedCount === 1 ? '' : 's'})` : ''}
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => setShowPackageDialog(false)}>
-            Cancel
-          </button>
-        </div>
-      </Dialog>
-
-      {/* ── Change Document Type Dialog ── */}
-      <Dialog
-        isOpen={showMoveDialog}
-        onClose={() => setShowMoveDialog(false)}
-        title="Change Document Type"
-        maxWidth={380}
-      >
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 0 }}>
-          Moves this record to the selected tab on the Project JO list and sets the print letterhead.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-          {DOC_TYPES.map((d) => (
-            <label key={d.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.65rem', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: moveTarget === d.value ? 'var(--accent-light)' : 'transparent' }}>
-              <input
-                type="radio"
-                name="move-doc-type"
-                checked={moveTarget === d.value}
-                onChange={() => setMoveTarget(d.value)}
-              />
-              <span style={{ fontSize: '0.9rem', fontWeight: moveTarget === d.value ? 600 : 400 }}>{d.label}</span>
-            </label>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem' }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ flex: 1 }}
-            disabled={upsert.isPending}
-            onClick={() => {
-              setDocType(moveTarget);
-              setShowMoveDialog(false);
-              // Persist immediately for saved orders; new orders persist on first save.
-              if (jo && canSave) upsert.mutate({ status: jo.status, doc: moveTarget });
-            }}
-          >
-            {upsert.isPending ? 'Saving…' : 'Apply'}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setShowMoveDialog(false)}>
             Cancel
           </button>
         </div>

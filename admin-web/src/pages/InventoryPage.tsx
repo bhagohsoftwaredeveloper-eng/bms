@@ -15,7 +15,6 @@ interface ItemForm {
   name: string;
   description: string;
   barcode: string;
-  unitPrice: string;
   stockQty: string;
   lowStockAlert: string;
   active: boolean;
@@ -26,7 +25,6 @@ const emptyForm: ItemForm = {
   name: '',
   description: '',
   barcode: '',
-  unitPrice: '',
   stockQty: '',
   lowStockAlert: '',
   active: true,
@@ -89,7 +87,6 @@ export function InventoryPage({ scope }: InventoryPageProps = {}) {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         barcode: form.barcode.trim() || undefined,
-        unitPrice: form.unitPrice === '' ? 0 : Number(form.unitPrice),
         lowStockAlert: form.lowStockAlert === '' ? 0 : Number(form.lowStockAlert),
         active: form.active,
         categoryId: form.categoryId || null,
@@ -138,7 +135,6 @@ export function InventoryPage({ scope }: InventoryPageProps = {}) {
       name: item.name,
       description: item.description ?? '',
       barcode: item.barcode ?? '',
-      unitPrice: item.unitPrice,
       stockQty: String(item.stockQty),
       lowStockAlert: String(item.lowStockAlert),
       active: item.active,
@@ -214,7 +210,6 @@ export function InventoryPage({ scope }: InventoryPageProps = {}) {
                 <th>Item</th>
                 {!scope && <th>Category</th>}
                 <th>Barcode</th>
-                <th style={{ textAlign: 'right' }}>Unit Price</th>
                 <th style={{ textAlign: 'center' }}>Stock</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ width: 220 }}></th>
@@ -238,7 +233,6 @@ export function InventoryPage({ scope }: InventoryPageProps = {}) {
                     </td>
                   )}
                   <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{item.barcode || '—'}</td>
-                  <td style={{ textAlign: 'right' }}>₱{Number(item.unitPrice).toLocaleString()}</td>
                   <td style={{ textAlign: 'center' }}>
                     <span
                       style={{
@@ -335,10 +329,6 @@ export function InventoryPage({ scope }: InventoryPageProps = {}) {
             <input value={form.barcode} onChange={(e) => set('barcode', e.target.value)} placeholder="Scan or type (optional)" />
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Unit Price (₱)</label>
-              <input type="number" min={0} step="0.01" value={form.unitPrice} onChange={(e) => set('unitPrice', e.target.value)} placeholder="0.00" />
-            </div>
             {!editing && (
               <div className="field" style={{ flex: 1 }}>
                 <label>Initial Stock</label>

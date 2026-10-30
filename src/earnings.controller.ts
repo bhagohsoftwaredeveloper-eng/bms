@@ -34,7 +34,8 @@ export class EarningsController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('mine') mine?: string) {
-    const isAdminLike = user.role === UserRole.SUPER_ADMIN || user.role === UserRole.ADMIN_STAFF;
+    const userRoles: UserRole[] = user.roles ?? [user.role];
+    const isAdminLike = userRoles.includes(UserRole.SUPER_ADMIN) || userRoles.includes(UserRole.ADMIN_STAFF);
     const userId = isAdminLike && mine !== 'true' ? undefined : user.id;
     return this.earningsService.findAll(userId);
   }

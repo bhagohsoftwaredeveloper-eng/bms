@@ -83,7 +83,7 @@ export function InventoryItemPicker({
                 )}
               </span>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                ₱{Number(item.unitPrice).toLocaleString()} · {item.stockQty} in stock
+                {item.stockQty} in stock
               </span>
             </label>
           );

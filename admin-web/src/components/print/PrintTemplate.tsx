@@ -1,6 +1,5 @@
-import type { Client, DocumentType, JobOrderStatus, SoftwareProduct, WarrantyTier } from '../../lib/types';
-import { DOC_META } from './doc-types';
-import { type UnitDraft, groupItems, unitCloudTotal } from '../../lib/job-order-units';
+import type { Client, JobOrderStatus, SoftwareProduct, WarrantyTier } from '../../lib/types';
+import { type UnitDraft, groupItems } from '../../lib/job-order-units';
 
 export interface LineItem {
   _key: string; // local only
@@ -8,7 +7,6 @@ export interface LineItem {
   name: string;
   description: string;
   quantity: number;
-  unitPrice: number;
   warrantyTier: WarrantyTier;
   unitKey?: string | null; // local computer key (UnitDraft._key); null/undefined = general item
 }
@@ -16,20 +14,12 @@ export interface LineItem {
 // ─── Print template (only visible when printing) ─────────────────────────────
 
 interface PrintTemplateProps {
-  docType: DocumentType;
   jobId: string;
   joNumber: string;
   client?: Client;
   product?: SoftwareProduct;
   units?: UnitDraft[];
   products?: SoftwareProduct[];
-  salePrice: number;
-  subtotal: number;
-  discountAmt: number;
-  materialsTotal: number;
-  grandTotal: number;
-  amountPaid?: number;
-  balanceDue?: number;
   items: LineItem[];
   remarks: string;
   status: JobOrderStatus;
@@ -41,21 +31,14 @@ interface PrintTemplateProps {
   companyEmail?: string;
   companyWebsite?: string;
   companyTin?: string;
-  /** Print only the letterhead (no client box, items or prices) — used for agreement-only prints. */
-  headerOnly?: boolean;
+
 }
 
 export function PrintTemplate({
-  docType, jobId, joNumber, client, product, units, products,
-  salePrice, subtotal, discountAmt, materialsTotal, grandTotal,
-  amountPaid, balanceDue,
+  jobId, joNumber, client, product, units, products,
   items, remarks, status, createdAt, companyName, companyLogoUrl,
-  companyAddress, companyPhone, companyEmail, companyWebsite, companyTin, headerOnly,
+  companyAddress, companyPhone, companyEmail, companyWebsite, companyTin,
 }: PrintTemplateProps) {
-  const p = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const meta = DOC_META[docType];
-  const isReceipt = docType === 'RECEIPT';
-  const totalLabel = isReceipt ? 'AMOUNT PAID' : 'GRAND TOTAL';
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '12pt', lineHeight: 1.5 }}>
@@ -84,7 +67,7 @@ export function PrintTemplate({
           </div>
         </div>
         <div style={{ textAlign: 'right', minWidth: '150pt', flexShrink: 0 }}>
-          <div style={{ fontSize: '13pt', fontWeight: 'bold' }}>{meta.label} — {meta.filePrefix}-{joNumber}</div>
+          <div style={{ fontSize: '13pt', fontWeight: 'bold' }}>Job Order — JO-{joNumber}</div>
           <div style={{ fontSize: '8.5pt', color: '#555', marginTop: '4pt' }}>Job ID: {jobId.slice(0, 8).toUpperCase()}</div>
           <div style={{ fontSize: '8.5pt', color: '#555' }}>Status: {status}</div>
           <div style={{ fontSize: '8.5pt', color: '#555' }}>Date: {createdAt ? new Date(createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</div>
@@ -92,7 +75,7 @@ export function PrintTemplate({
         </div>
       </div>
 
-      {headerOnly ? null : (<>
+      <>
       {/* Client info */}
       <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '6pt 8pt', marginBottom: '8pt', lineHeight: 1.25, fontSize: '10pt' }}>
         <strong>Client Information</strong>
@@ -108,7 +91,6 @@ export function PrintTemplate({
       {units && units.length > 0 ? (
         groupItems(items, units).map((group) => {
           const prod = group.unit ? products?.find((x) => x.id === group.unit!.productId) : undefined;
-          const groupTotal = group.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
           return (
             <div key={group.key} style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt' }}>
               <strong>{group.unit ? `${group.unit.label || 'Computer'} — System / Software` : 'General Materials'}</strong>
@@ -118,22 +100,19 @@ export function PrintTemplate({
                     <tr style={{ background: '#f0f0f0' }}>
                       <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
                       <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Details</th>
-                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Price</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
                       <td style={{ border: '1px solid #ccc', padding: '6pt' }}>{prod?.productName ?? '—'}</td>
                       <td style={{ border: '1px solid #ccc', padding: '6pt' }}>v{prod?.version ?? '—'}</td>
-                      <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(group.unit.price)}</td>
                     </tr>
                     {group.unit.cloudEnabled && (
                       <tr>
                         <td style={{ border: '1px solid #ccc', padding: '6pt' }}>Cloud subscription</td>
                         <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
-                          {p(group.unit.cloudMonthlyRate)} / month × {group.unit.cloudMonths} mo
+                          {group.unit.cloudMonths} month{group.unit.cloudMonths === 1 ? '' : 's'}
                         </td>
-                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(unitCloudTotal(group.unit))}</td>
                       </tr>
                     )}
                   </tbody>
@@ -146,8 +125,6 @@ export function PrintTemplate({
                       <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
                       <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Description</th>
                       <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>Qty</th>
-                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Unit Price</th>
-                      <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -156,14 +133,8 @@ export function PrintTemplate({
                         <td style={{ border: '1px solid #ccc', padding: '6pt' }}>{item.name}</td>
                         <td style={{ border: '1px solid #ccc', padding: '6pt', color: '#555' }}>{item.description || '—'}</td>
                         <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>{item.quantity}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>{p(item.unitPrice)}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(item.quantity * item.unitPrice)}</td>
                       </tr>
                     ))}
-                    <tr>
-                      <td colSpan={4} style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>Materials Total</td>
-                      <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(groupTotal)}</td>
-                    </tr>
                   </tbody>
                 </table>
               )}
@@ -180,7 +151,6 @@ export function PrintTemplate({
             <tr style={{ background: '#f0f0f0' }}>
               <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
               <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Details</th>
-              <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Price</th>
             </tr>
           </thead>
           <tbody>
@@ -191,7 +161,6 @@ export function PrintTemplate({
               <td style={{ border: '1px solid #ccc', padding: '6pt' }}>
                 v{product?.version ?? '—'}
               </td>
-              <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(salePrice)}</td>
             </tr>
           </tbody>
         </table>
@@ -207,8 +176,6 @@ export function PrintTemplate({
                 <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Item</th>
                 <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'left' }}>Description</th>
                 <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>Qty</th>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Unit Price</th>
-                <th style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>Subtotal</th>
               </tr>
             </thead>
             <tbody>
@@ -217,54 +184,13 @@ export function PrintTemplate({
                   <td style={{ border: '1px solid #ccc', padding: '6pt' }}>{item.name}</td>
                   <td style={{ border: '1px solid #ccc', padding: '6pt', color: '#555' }}>{item.description || '—'}</td>
                   <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'center' }}>{item.quantity}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right' }}>{p(item.unitPrice)}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(item.quantity * item.unitPrice)}</td>
                 </tr>
               ))}
-              <tr>
-                <td colSpan={4} style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>Materials Total</td>
-                <td style={{ border: '1px solid #ccc', padding: '6pt', textAlign: 'right', fontWeight: 'bold' }}>{p(materialsTotal)}</td>
-              </tr>
             </tbody>
           </table>
         </div>
       )}
         </>
-      )}
-
-      {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16pt' }}>
-        <div style={{ border: '2px solid #000', borderRadius: '4pt', padding: '10pt 20pt', textAlign: 'right', minWidth: '160pt' }}>
-          {discountAmt > 0 && (
-            <>
-              <div style={{ fontSize: '10pt', color: '#555', display: 'flex', justifyContent: 'space-between', gap: '16pt' }}>
-                <span>Subtotal</span><span>{p(subtotal)}</span>
-              </div>
-              <div style={{ fontSize: '10pt', color: '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt', borderBottom: '1px solid #ccc', paddingBottom: '4pt', marginBottom: '4pt' }}>
-                <span>Discount</span><span>−{p(discountAmt)}</span>
-              </div>
-            </>
-          )}
-          <div style={{ fontSize: '10pt', color: '#555' }}>{totalLabel}</div>
-          <div style={{ fontSize: '18pt', fontWeight: 'bold' }}>{p(grandTotal)}</div>
-          {!isReceipt && !!amountPaid && amountPaid > 0 && (
-            <>
-              <div style={{ fontSize: '10pt', color: '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt', borderTop: '1px solid #ccc', marginTop: '4pt', paddingTop: '4pt' }}>
-                <span>Down Payment</span><span>{p(amountPaid)}</span>
-              </div>
-              <div style={{ fontSize: '10pt', fontWeight: 'bold', color: (balanceDue ?? 0) > 0 ? '#b91c1c' : '#16a34a', display: 'flex', justifyContent: 'space-between', gap: '16pt' }}>
-                <span>Balance</span><span>{p(balanceDue ?? 0)}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {isReceipt && (
-        <div style={{ border: '1px solid #ccc', borderRadius: '4pt', padding: '10pt', marginBottom: '16pt', fontSize: '11pt' }}>
-          Received from <strong>{client?.businessName ?? 'the client'}</strong> the sum of
-          {' '}<strong>{p(grandTotal)}</strong> in full/partial payment for the items listed above.
-        </div>
       )}
 
       {remarks && (
@@ -277,13 +203,13 @@ export function PrintTemplate({
       {/* Signature block */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40pt', marginTop: '48pt' }}>
         <div style={{ borderTop: '1px solid #000', paddingTop: '6pt', textAlign: 'center', fontSize: '10pt' }}>
-          {isReceipt ? 'Received payment by / Cashier' : 'Prepared by / Admin Staff'}
+          Prepared by / Admin Staff
         </div>
         <div style={{ borderTop: '1px solid #000', paddingTop: '6pt', textAlign: 'center', fontSize: '10pt' }}>
-          {docType === 'QUOTATION' ? 'Conforme / Client Representative' : 'Received by / Client Representative'}
+          Received by / Client Representative
         </div>
       </div>
-      </>)}
+      </>
     </div>
   );
 }

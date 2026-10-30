@@ -23,18 +23,6 @@ export class KpisController {
   // ── Admin-only ──────────────────────────────────────────────────────────────
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
-  @Get('financial-summary')
-  getFinancialSummary() {
-    return this.kpisService.getFinancialSummary();
-  }
-
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
-  @Get('revenue-trend')
-  getRevenueTrend() {
-    return this.kpisService.getRevenueTrend();
-  }
-
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN_STAFF)
   @Get('team')
   getTeam(@Query('month') month: string, @Query('year') year: string) {
     const now = new Date();

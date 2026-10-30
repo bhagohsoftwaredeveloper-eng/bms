@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { useAuthStore } from '../lib/auth-store';
-import { computeTotals } from '../lib/job-order-units';
 import { StatusBadge } from '../components/StatusBadge';
 import { Dialog } from '../components/Dialog';
 import { Pagination, usePagination } from '../components/Pagination';
 import { TableToolbar, matchesSearch, inDateRange } from '../components/TableToolbar';
-import type { DocumentType, Job, JobOrder, JobOrderStatus, JobOrderType } from '../lib/types';
+import type { Job, JobOrder, JobOrderStatus, JobOrderType } from '../lib/types';
 
 const JO_TYPE_LABELS: Record<JobOrderType, string> = {
   SOFTWARE: 'Software',
@@ -18,45 +16,7 @@ const JO_TYPE_LABELS: Record<JobOrderType, string> = {
 
 const JO_STATUSES: JobOrderStatus[] = ['DRAFT', 'FINALIZED', 'ON_GOING', 'COMPLETED', 'CANCELLED'];
 
-const DOC_TABS: { value: DocumentType; label: string }[] = [
-  { value: 'JOB_ORDER', label: 'Job Order' },
-  { value: 'QUOTATION', label: 'Quotation' },
-  { value: 'INVOICE', label: 'Sales Invoice' },
-  { value: 'RECEIPT', label: 'Official Receipt' },
-];
-
-function TabButton({ label, active, count, onClick }: { label: string; active: boolean; count?: number; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: '0.6rem 1.25rem',
-        fontWeight: 600,
-        fontSize: '0.9rem',
-        border: 'none',
-        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-        background: 'transparent',
-        color: active ? 'var(--accent)' : 'var(--text-muted)',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.4rem',
-      }}
-    >
-      {label}
-      {count !== undefined && (
-        <span style={{ fontSize: '0.72rem', background: active ? 'var(--accent)' : 'var(--border)', color: active ? '#fff' : 'var(--text-muted)', borderRadius: 999, padding: '0.1rem 0.45rem', fontWeight: 700 }}>
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
-
 export function JobOrdersPage() {
-  // Encoders don't see pricing.
-  const hidePrices = useAuthStore((s) => s.user?.role) === 'ENCODER';
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
 
@@ -65,15 +25,13 @@ export function JobOrdersPage() {
     queryFn: async () => (await api.get<JobOrder[]>('/job-orders')).data,
   });
 
-  const [activeDocTab, setActiveDocTab] = useState<DocumentType>('JOB_ORDER');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const allOrders = jobOrdersQuery.data ?? [];
   const filteredOrders = allOrders.filter((jo) =>
-    (jo.docType ?? 'JOB_ORDER') === activeDocTab
-    && matchesSearch(search, jo.id.slice(0, 8), jo.client?.businessName, jo.product?.productName)
+    matchesSearch(search, jo.id.slice(0, 8), jo.client?.businessName, jo.product?.productName)
     && (!status || jo.status === status)
     && inDateRange(jo.createdAt, from, to),
   );
@@ -102,14 +60,9 @@ export function JobOrdersPage() {
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => {
-            // Quotations don't need an installation yet — go straight to a
-            // standalone order; other doc types pick their installation first.
-            if (activeDocTab === 'QUOTATION') navigate('/job-orders/order/new?doc=QUOTATION');
-            else setShowCreate(true);
-          }}
+          onClick={() => setShowCreate(true)}
         >
-          {activeDocTab === 'QUOTATION' ? 'Create Quotation' : 'Create Project JO'}
+          Create Project JO
         </button>
       </div>
 
@@ -157,7 +110,7 @@ export function JobOrdersPage() {
                         type="button"
                         className="btn btn-primary"
                         style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
-                        onClick={() => navigate(`/job-orders/${job.id}?doc=${activeDocTab}`)}
+                        onClick={() => navigate(`/job-orders/${job.id}`)}
                       >
                         Create JO
                       </button>
@@ -174,19 +127,6 @@ export function JobOrdersPage() {
           </button>
         </div>
       </Dialog>
-
-      {/* Document-type tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {DOC_TABS.map((t) => (
-          <TabButton
-            key={t.value}
-            label={t.label}
-            active={activeDocTab === t.value}
-            count={allOrders.filter((jo) => (jo.docType ?? 'JOB_ORDER') === t.value).length}
-            onClick={() => setActiveDocTab(t.value)}
-          />
-        ))}
-      </div>
 
       <div className="card">
         {jobOrdersQuery.isLoading && <p>Loading job orders…</p>}
@@ -206,7 +146,7 @@ export function JobOrdersPage() {
           />
         )}
         {jobOrdersQuery.data && filteredOrders.length === 0 && (
-          <p>No {DOC_TABS.find((t) => t.value === activeDocTab)?.label.toLowerCase()} records match.</p>
+          <p>No job orders match.</p>
         )}
         {jobOrdersQuery.data && filteredOrders.length > 0 && (
           <>
@@ -217,8 +157,6 @@ export function JobOrdersPage() {
                 <th>Client</th>
                 <th>Type</th>
                 <th>Product</th>
-                {!hidePrices && <th>Sale Price</th>}
-                {!hidePrices && <th>Total</th>}
                 <th>Status</th>
                 <th>Created At</th>
                 <th></th>
@@ -226,14 +164,6 @@ export function JobOrdersPage() {
             </thead>
             <tbody>
               {pg.paginated.map((jo) => {
-                const { grandTotal } = computeTotals(
-                  Number(jo.salePrice),
-                  Number(jo.discount),
-                  jo.discountType,
-                  (jo.items ?? []).map((i) => ({ quantity: i.quantity, unitPrice: Number(i.unitPrice) })),
-                  Number(jo.cloudTotal ?? 0),
-                );
-
                 return (
                   <tr key={jo.id}>
                     <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>
@@ -246,8 +176,6 @@ export function JobOrdersPage() {
                       </span>
                     </td>
                     <td>{jo.product?.productName ?? (jo.type === 'SOFTWARE' ? jo.productId : '—')}</td>
-                    {!hidePrices && <td>₱{Number(jo.salePrice).toLocaleString()}</td>}
-                    {!hidePrices && <td style={{ fontWeight: 600 }}>₱{grandTotal.toLocaleString()}</td>}
                     <td>
                       <StatusBadge status={jo.status.toLowerCase()} />
                     </td>

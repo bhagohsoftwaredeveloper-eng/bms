@@ -1,9 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../lib/api';
-import { ChartCard } from '../components/ChartCard';
-import { SimpleBarChart, SimplePieChart } from '../components/SimpleChart';
-import type { FinancialSummary, Incentive, KpiMetric, RevenueTrend, TeamMemberKpi } from '../lib/types';
+import type { Incentive, KpiMetric, TeamMemberKpi } from '../lib/types';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const STATUS_COLOR: Record<string, string> = { PENDING: 'var(--warning)', APPROVED: 'var(--info)', PAID: 'var(--success)' };
@@ -92,16 +90,6 @@ export function AnalyticsPage() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const summaryQuery = useQuery({
-    queryKey: ['kpis', 'financial-summary'],
-    queryFn: async () => (await api.get<FinancialSummary>('/kpis/financial-summary')).data,
-  });
-
-  const trendQuery = useQuery({
-    queryKey: ['kpis', 'revenue-trend'],
-    queryFn: async () => (await api.get<RevenueTrend[]>('/kpis/revenue-trend')).data,
-  });
-
   const team = useQuery({
     queryKey: ['analytics-team', month, year],
     queryFn: async () => (await api.get<TeamMemberKpi[]>(`/kpis/team?month=${month}&year=${year}`)).data,
@@ -127,48 +115,14 @@ export function AnalyticsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['analytics-incentives'] }),
   });
 
-  const summary = summaryQuery.data;
-  const trend = trendQuery.data;
   const years = [now.getFullYear() - 1, now.getFullYear()];
 
   return (
     <div>
       <h1 style={{ marginBottom: '0.25rem' }}>Analytics & KPI</h1>
       <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-        Financial performance, team KPIs, and incentive management.
+        Team KPIs and incentive management.
       </p>
-
-      {/* ── Financial Summary ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginTop: '1.5rem', marginBottom: '2rem' }}>
-        <div className="card">
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Total Revenue</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--success)' }}>
-            ₱{summary?.totalRevenue.toLocaleString() ?? '…'}
-          </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>All-time finalized sales</div>
-        </div>
-        <div className="card">
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>This Month</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>₱{summary?.currentMonthRevenue.toLocaleString() ?? '…'}</div>
-          <div style={{ fontSize: '0.8rem', color: (summary?.growth ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
-            {(summary?.growth ?? 0) >= 0 ? '+' : ''}{summary?.growth.toFixed(1) ?? '…'}% from last month
-          </div>
-        </div>
-        <div className="card">
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Last Month</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>₱{summary?.prevMonthRevenue.toLocaleString() ?? '…'}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Previous month total</div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem' }}>
-        <ChartCard title="Revenue Trend" subtitle="Monthly revenue for the last 6 months">
-          {trend ? <SimpleBarChart data={trend} height={320} /> : <div style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Loading…</div>}
-        </ChartCard>
-        <ChartCard title="Revenue by Product" subtitle="Distribution of sales across software products">
-          {summary ? <SimplePieChart data={summary.revenueByProduct} size={320} /> : <div style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Loading…</div>}
-        </ChartCard>
-      </div>
 
       {/* ── Period selector for KPI ── */}
       <h2 style={{ marginTop: '2.5rem', marginBottom: '0.25rem' }}>Team KPI Performance</h2>
